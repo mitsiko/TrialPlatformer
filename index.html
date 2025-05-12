@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2D Platformer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            font: inherit;
+            vertical-align: baseline;
+        }
+        body {
+            background: black;
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            width: 1024px;
+            height: 576px;
+            image-rendering: pixelated;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Core Systems (must load first) -->
+    <script src="./classes/TimeManager.js"></script>
+    <script src="./classes/SoundManager.js"></script>
+    <script src="./classes/GameStateManager.js"></script>
+    
+    <!-- Utility Classes -->
+    <script src="./classes/AnimationController.js"></script>
+    <script src="./classes/CameraController.js"></script>
+    <script src="./classes/GameRenderer.js"></script>
+    <script src="./classes/HUD.js"></script>
+    
+    <!-- Game Objects -->
+    <script src="./classes/CollisionBlock.js"></script>
+    <script src="./classes/Platform.js"></script>
+    <script src="./classes/Player.js"></script>
+    
+    <!-- Utils -->
+    <script src="./js/utils.js"></script>
+    
+    <!-- Layer Data -->
+    <script src="./data/l_BackgroundColor.js"></script>
+    <script src="./data/l_Pines1.js"></script>
+    <script src="./data/l_Pines2.js"></script>
+    <script src="./data/l_Pines3.js"></script>
+    <script src="./data/l_Pines4.js"></script>
+    <script src="./data/l_Platforms1.js"></script>
+    <script src="./data/l_Platfroms2.js"></script>
+    <script src="./data/l_Spikes.js"></script>
+    <script src="./data/l_Collisions.js"></script>
+    <script src="./data/l_Grass.js"></script>
+    <script src="./data/l_Coins.js"></script>
+    <script src="./data/l_Cans.js"></script>
+    <script src="./data/collisions.js"></script>
+    
+    <!-- Main Game Code -->
+    <script src="./js/eventListeners.js"></script>
+    <script src="./js/index.js"></script>
+</body>
+</html>
