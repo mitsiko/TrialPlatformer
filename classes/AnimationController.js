@@ -21,7 +21,7 @@ class AnimationController {
     await this.loadAnimation('running', 'images/running.png', 8, 32, 32);
     await this.loadAnimation('jumping', 'images/jumping.png', 3, 40, 40);
     await this.loadAnimation('falling', 'images/falling.png', 1, 40, 40);
-    await this.loadAnimation('landing', 'images/landing.png', 4, 40, 40);
+    await this.loadAnimation('landing', 'images/landing.png', 5, 40, 40); // 5 frames, 40x40px
     await this.loadAnimation('death', 'images/death.png', 1, 32, 32);
     
     this.initialized = true;
@@ -64,56 +64,53 @@ class AnimationController {
     });
   }
   
+  // Modify the play() method to ensure callbacks fire:
   play(animationName, loop = true, frameRate = 0.1, callback = null) {
-    if (!this.animations[animationName]) {
-      console.error(`Animation not found: ${animationName}`);
-      return;
-    }
+    if (!this.animations[animationName]) return;
     
-    // Only restart if it's a different animation
-    if (this.currentAnimation !== animationName) {
+    // Always restart animation if it's not looping
+    if (this.currentAnimation !== animationName || !loop) {
       this.currentAnimation = animationName;
       this.currentFrame = 0;
       this.frameTimer = 0;
       this.isPlaying = true;
       this.isLooping = loop;
       this.frameDuration = frameRate;
-      this.onAnimationComplete = callback;
+      this.onAnimationComplete = callback || function() {};
     }
   }
-  
+
+  isComplete() {
+    if (!this.currentAnimation || !this.animations[this.currentAnimation]) return false;
+    const animation = this.animations[this.currentAnimation];
+    return !this.isLooping && this.currentFrame >= animation.frameCount - 1;
+  }
+
+  // And modify the update() method:
   update(deltaTime) {
     if (!this.isPlaying || !this.currentAnimation) return;
     
     const animation = this.animations[this.currentAnimation];
-    if (!animation) return;
-    
     this.frameTimer += deltaTime;
     
-    // Time to advance to next frame
     if (this.frameTimer >= this.frameDuration) {
       this.frameTimer = 0;
       this.currentFrame++;
       
-      // Check if animation is complete
       if (this.currentFrame >= animation.frameCount) {
         if (this.isLooping) {
-          // Loop back to first frame
           this.currentFrame = 0;
         } else {
-          // Stop at last frame
           this.currentFrame = animation.frameCount - 1;
           this.isPlaying = false;
-          
-          // Call the completion callback if provided
           if (this.onAnimationComplete) {
-            this.onAnimationComplete();
+            this.onAnimationComplete(); // Ensure this gets called
           }
         }
       }
     }
   }
-  
+    
   draw(context, x, y) {
     if (!this.initialized || !this.currentAnimation) return;
     

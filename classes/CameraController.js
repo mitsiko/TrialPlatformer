@@ -1,6 +1,5 @@
-// CameraController.js - Handles camera scrolling and following player
 class CameraController {
-  constructor() {
+  constructor(canvas, dpr) {
     this.x = 0;
     this.y = 0;
     this.width = canvas.width / dpr;
@@ -79,6 +78,3 @@ class CameraController {
     );
   }
 }
-
-// Export a singleton instance
-const cameraController = new CameraController();

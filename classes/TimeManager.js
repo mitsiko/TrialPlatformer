@@ -98,5 +98,3 @@ class TimeManager {
   }
 }
 
-// Export a singleton instance
-const timeManager = new TimeManager();

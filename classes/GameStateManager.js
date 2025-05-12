@@ -11,17 +11,19 @@ class GameStateManager {
     
     this.currentState = this.states.INTRO;
     this.stateChangeCallbacks = {};
-    
-    // Store time when state was entered
     this.stateEnteredTime = 0;
-    
-    // Player stats
     this.lives = 3;
     this.coins = 0;
     this.cans = 0;
-    
-    this.coinsCollected = new Set(); // Store collected coin positions
-    this.cansCollected = new Set();  // Store collected can positions
+    this.coinsCollected = new Set();
+    this.cansCollected = new Set();
+  }
+  
+  startGame() {
+    if (this.currentState === this.states.INTRO || 
+        this.currentState === this.states.PAUSED) {
+      this.changeState(this.states.PLAYING);
+    }
   }
   
   init() {
@@ -29,11 +31,6 @@ class GameStateManager {
   }
   
   reset() {
-    this.lives = 3;
-    this.coins = 0;
-    this.cans = 0;
-    this.coinsCollected.clear();
-    this.cansCollected.clear();
     this.changeState(this.states.INTRO);
   }
   
@@ -42,19 +39,23 @@ class GameStateManager {
     this.currentState = newState;
     this.stateEnteredTime = timeManager.gameTime;
     
-    // Call any registered callbacks for this state change
     if (this.stateChangeCallbacks[newState]) {
       this.stateChangeCallbacks[newState].forEach(callback => callback(oldState));
     }
     
-    // Handle special state transitions
     switch (newState) {
       case this.states.INTRO:
         soundManager.stopMusic();
         timeManager.reset();
+        this.lives = 3;
+        this.coins = 0;
+        this.cans = 0;
+        this.coinsCollected.clear();
+        this.cansCollected.clear();
         break;
         
       case this.states.PLAYING:
+        timeManager.resume();
         if (oldState === this.states.INTRO || oldState === this.states.PAUSED) {
           soundManager.playMusic('intro');
         }
@@ -67,18 +68,12 @@ class GameStateManager {
         
       case this.states.LEVEL_COMPLETE:
         soundManager.playMusic('win');
-        // Auto-transition back to intro after delay
-        timeManager.setTimeout(() => {
-          this.changeState(this.states.INTRO);
-        }, 3);
+        timeManager.setTimeout(() => this.changeState(this.states.INTRO), 3);
         break;
         
       case this.states.GAME_OVER:
         soundManager.playMusic('gameOver');
-        // Auto-transition back to intro after delay
-        timeManager.setTimeout(() => {
-          this.changeState(this.states.INTRO);
-        }, 8);
+        timeManager.setTimeout(() => this.changeState(this.states.INTRO), 8);
         break;
     }
   }
@@ -147,5 +142,3 @@ class GameStateManager {
   }
 }
 
-// Export a singleton instance
-const gameStateManager = new GameStateManager();

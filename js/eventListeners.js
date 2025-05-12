@@ -1,32 +1,83 @@
+// Debug version - logs all key events
+console.log("Initializing event listeners...");
+
 window.addEventListener('keydown', (event) => {
-  switch (event.key) {
-    case 'w':
-      player.jump()
-      keys.w.pressed = true
-      break
-    case 'a':
-      keys.a.pressed = true
-      break
-    case 'd':
-      keys.d.pressed = true
-      break
-  }
-})
+    // Allow any key to start game from intro
+    if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+      gameStateManager.startGame();
+      return;
+    }
+    
+    if (gameStateManager.currentState !== gameStateManager.states.PLAYING) {
+        console.log("Ignoring input - game not in PLAYING state");
+        return;
+    }
+
+    switch (event.key.toLowerCase()) {
+        case 'w':
+        case 'arrowup':
+            console.log("Jump attempted");
+            if (player.isOnGround) {
+                player.jump();
+                keys.w.pressed = true;
+            }
+            break;
+            
+        case 'a':
+        case 'arrowleft':
+            console.log("Moving LEFT");
+            keys.a.pressed = true;
+            break;
+            
+        case 'd':
+        case 'arrowright':
+            console.log("Moving RIGHT");
+            keys.d.pressed = true;
+            break;
+            
+        case 'escape':
+            console.log("Pause toggled");
+            // Pause logic remains same
+            break;
+    }
+});
 
 window.addEventListener('keyup', (event) => {
-  switch (event.key) {
-    case 'a':
-      keys.a.pressed = false
-      break
-    case 'd':
-      keys.d.pressed = false
-      break
-  }
-})
+    console.log(`Key UP: ${event.key}`);
+    
+    switch (event.key.toLowerCase()) {
+        case 'a':
+        case 'arrowleft':
+            keys.a.pressed = false;
+            break;
+            
+        case 'd':
+        case 'arrowright':
+            keys.d.pressed = false;
+            break;
+            
+        case 'w':
+        case 'arrowup':
+            keys.w.pressed = false;
+            break;
+    }
+});
 
-// On return to game's tab, ensure delta time is reset
+console.log("Event listeners initialized");
+
+// Handle tab visibility changes
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    lastTime = performance.now()
+    lastTime = performance.now();
+    
+    // Resume game if it was playing when tab was hidden
+    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+      timeManager.resume();
+    }
+  } else {
+    // Pause game when tab is hidden
+    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+      timeManager.pause();
+    }
   }
-})
+});

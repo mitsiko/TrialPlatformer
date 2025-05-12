@@ -1,8 +1,9 @@
 // Updated Player.js with animation and movement states
-const X_VELOCITY = 200;
-const JUMP_POWER = 250;
+const X_VELOCITY = 180;       // Reduced from 200 for better control
+const JUMP_POWER = 400;       // Increased from 250 for better feel
 const VERTICAL_HOP_POWER = 180; // Smaller jump for vertical hops
-const GRAVITY = 580;
+const GRAVITY = 900;          // Increased from 580 for snappier falls
+const SKID_DECELERATION = 20; // Add this new constant
 const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
 
@@ -37,25 +38,61 @@ class Player {
     
     // Initialize animation states
     this.animation.init();
+  
+
+    this.collisionOffset = {
+      x: 20 ,       // Horizontal offset
+      y: size * 1  // Move collision box DOWN (negative Y moves it downward)
+    };
+    
+    this.collisionSize = {
+      width: size * 0.7,
+      height: size * 1  // Make collision box shorter
+    };
   }
 
   draw(c) {
     // Skip drawing if blinking during invincibility
     if (this.isInvincible && !this.isVisible) return;
     
-    // Draw animation at bottom-center of player
-    this.animation.draw(c, this.x, this.y + this.height);
+    // Draw animation centered on player
+    this.animation.draw(
+      c, 
+      this.x + this.width/2,  // Center X
+      this.y + this.height    // Anchor at feet
+    );
     
-    // Debug bounding box
-    // c.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-    // c.strokeRect(this.x, this.y, this.width, this.height);
+    // DEBUG: Draw collision box (remove after testing)
+    c.fillStyle = 'rgba(255, 0, 0, 0.3)';
+    c.fillRect(
+      this.x + this.collisionOffset.x,
+      this.y + this.collisionOffset.y,
+      this.collisionSize.width,
+      this.collisionSize.height
+    );
   }
 
   update(deltaTime, collisionBlocks) {
+    console.log(`State: ${this.movementState} | ` +
+           `InputLocked: ${this.inputLocked} | ` +
+           `OnGround: ${this.isOnGround} | ` +
+           `Anim: ${this.animation.currentAnimation}`);
+
     if (!deltaTime) return;
     
     // Update animation
     this.animation.update(deltaTime);
+    if (this.movementState === 'landing' && 
+        this.animation.currentAnimation === 'landing' &&
+        this.animation.currentFrame >= 3) { // Force-complete on last frame
+      this.animation.forceComplete();
+    }
+
+    if (this.movementState === 'landing') {
+      console.log(`Landing progress: ${this.animation.currentFrame+1}/5 frames | ` +
+                `Timer: ${this.animation.frameTimer.toFixed(3)}/${this.animation.frameDuration}`);
+    }
+
     
     // Update invincibility state
     this.updateInvincibility(deltaTime);
@@ -63,6 +100,8 @@ class Player {
     // Only apply gravity and movement if not in death state
     if (this.movementState !== 'death') {
       this.applyGravity(deltaTime);
+
+      if (this.velocity.y > 500) this.velocity.y = 500;
       
       // Update fall tracking for fall damage
       this.updateFallTracking();
@@ -164,17 +203,21 @@ class Player {
   }
   
   land() {
-    // Only trigger landing if we're not already in landing state
-    if (this.movementState !== 'landing') {
+    if (this.movementState === 'falling') {
+      console.log("Starting 5-frame landing animation");
       this.movementState = 'landing';
-      this.inputLocked = true; // Lock controls during landing
+      this.inputLocked = true;
       
-      // Play landing animation (non-looping)
-      this.animation.play('landing', false, 0.1, () => {
-        // When landing completes, unlock controls and return to idle
+      this.animation.play('landing', false, 0.08, () => { // Faster 0.08s per frame
+        console.log("Landing animation completed");
         this.inputLocked = false;
-        this.movementState = 'idle';
-        this.animation.play('idle', true);
+        
+        // Emergency fallback in case callback fires early
+        if (this.animation.currentFrame < 4) {
+          this.animation.forceComplete();
+        }
+        
+        this.movementState = this.velocity.x !== 0 ? 'running' : 'idle';
       });
     }
   }
@@ -227,176 +270,186 @@ class Player {
   }
 
   handleInput(keys) {
-    // Skip input handling if controls are locked
-    if (this.inputLocked) return;
-    
-    // Default to zero horizontal velocity
-    this.velocity.x = 0;
-    
-    // Handle horizontal movement
-    if (keys.d.pressed) {
-      this.velocity.x = X_VELOCITY;
-      this.direction = 1; // facing right
-      this.animation.setDirection(1);
-    } else if (keys.a.pressed) {
-      this.velocity.x = -X_VELOCITY;
-      this.direction = -1; // facing left
-      this.animation.setDirection(-1);
-    }
-    
-    // Jump only happens on keydown event in eventListeners.js
+      console.log("Handling input - Current keys state:", keys);
+      
+      if (this.inputLocked) {
+          console.log("Input locked - ignoring");
+          return;
+      }
+
+      // Reset horizontal velocity
+      this.velocity.x = 0;
+
+      if (keys.a.pressed) {
+          console.log("Applying LEFT movement");
+          this.velocity.x = -X_VELOCITY;
+          this.direction = -1;
+          this.animation.setDirection(-1);
+      }
+      
+      if (keys.d.pressed) {
+          console.log("Applying RIGHT movement");
+          this.velocity.x = X_VELOCITY;
+          this.direction = 1;
+          this.animation.setDirection(1);
+      }
+      
+      console.log("Final velocity:", this.velocity);
   }
   
   updateMovementState() {
-    // Death state overrides all others
-    if (this.movementState === 'death') return;
-    
-    // Landing state is handled by the animation callback
-    if (this.movementState === 'landing') return;
-    
-    // Jumping state is handled by jump() method and animation callback
-    if (this.movementState === 'jumping') return;
-    
+    // Skip if in special states
+    if (this.movementState === 'death' || 
+        this.movementState === 'landing') {
+      return;
+    }
+
+    // Airborne states
     if (!this.isOnGround) {
-      // If we're not on ground and moving upward, we're likely in a jump
-      // If moving downward, we're falling
-      if (this.velocity.y > 0) {
-        this.movementState = 'falling';
-        this.animation.play('falling', true);
+      if (this.velocity.y < 0) {
+        if (this.movementState !== 'jumping') {
+          this.movementState = 'jumping';
+          this.animation.play('jumping', false);
+        }
+      } else {
+        if (this.movementState !== 'falling') {
+          this.movementState = 'falling';
+          this.animation.play('falling', true);
+        }
       }
-    } else {
-      // On ground - either idle or running
-      this.canJump = true;
-      
-      if (this.velocity.x !== 0) {
+      return;
+    }
+
+    // Grounded states
+    if (this.velocity.x !== 0) {
+      if (this.movementState !== 'running') {
         this.movementState = 'running';
         this.animation.play('running', true, 0.1);
-      } else {
+      }
+    } else {
+      if (this.movementState !== 'idle') {
         this.movementState = 'idle';
         this.animation.play('idle', true);
       }
     }
   }
 
+
   checkForHorizontalCollisions(collisionBlocks) {
-    const buffer = 0.0001;
-    for (let i = 0; i < collisionBlocks.length; i++) {
-      const collisionBlock = collisionBlocks[i];
+    const buffer = 0.1;
+    const collisionBox = {
+      x: this.x + this.collisionOffset.x,
+      y: this.y + this.collisionOffset.y,
+      width: this.collisionSize.width,
+      height: this.collisionSize.height
+    };
 
-      // Check if a collision exists on all axes
-      if (
-        this.x <= collisionBlock.x + collisionBlock.width &&
-        this.x + this.width >= collisionBlock.x &&
-        this.y + this.height >= collisionBlock.y &&
-        this.y <= collisionBlock.y + collisionBlock.height
-      ) {
-        // Check collision while player is going left
-        if (this.velocity.x < -0) {
-          this.x = collisionBlock.x + collisionBlock.width + buffer;
-          break;
+    for (let block of collisionBlocks) {
+      if (this.isColliding(collisionBox, block)) {
+        // Left collision
+        if (this.velocity.x < 0) {
+          this.x = block.x + block.width - this.collisionOffset.x + buffer;
         }
-
-        // Check collision while player is going right
-        if (this.velocity.x > 0) {
-          this.x = collisionBlock.x - this.width - buffer;
-          break;
+        // Right collision
+        else if (this.velocity.x > 0) {
+          this.x = block.x - this.collisionSize.width - this.collisionOffset.x - buffer;
         }
+        break;
       }
     }
   }
 
   checkForVerticalCollisions(collisionBlocks) {
-    const buffer = 0.0001;
+    const buffer = 0.1;
     let wasInAir = !this.isOnGround;
     this.isOnGround = false;
-    
-    for (let i = 0; i < collisionBlocks.length; i++) {
-      const collisionBlock = collisionBlocks[i];
 
-      // If a collision exists
-      if (
-        this.x <= collisionBlock.x + collisionBlock.width &&
-        this.x + this.width >= collisionBlock.x &&
-        this.y + this.height >= collisionBlock.y &&
-        this.y <= collisionBlock.y + collisionBlock.height
-      ) {
-        // Check collision while player is going up
-        if (this.velocity.y < 0) {
+    const feetY = this.y + this.height + this.collisionOffset.y;
+    const headY = this.y + this.collisionOffset.y;
+
+    for (let block of collisionBlocks) {
+      // Check if player is landing (from above)
+      if (this.velocity.y > 0 && feetY <= block.y + buffer && feetY >= block.y) {
+        if (this.x + this.width > block.x && this.x < block.x + block.width) {
+          this.y = block.y - this.height - this.collisionOffset.y - buffer;
           this.velocity.y = 0;
-          this.y = collisionBlock.y + collisionBlock.height + buffer;
+          this.isOnGround = true;
+          if (wasInAir) this.land();
           break;
         }
-
-        // Check collision while player is going down
-        if (this.velocity.y > 0) {
+      }
+      
+      // Check if player hits ceiling (from below)
+      if (this.velocity.y < 0 && headY >= block.y + block.height - buffer) {
+        if (this.x + this.width > block.x && this.x < block.x + block.width) {
+          this.y = block.y + block.height - this.collisionOffset.y + buffer;
           this.velocity.y = 0;
-          this.y = collisionBlock.y - this.height - buffer;
-          this.isOnGround = true;
-          
-          // If we just landed from being in the air
-          if (wasInAir && this.movementState === 'falling') {
-            this.land();
-          }
-          
           break;
         }
       }
     }
   }
-
   checkPlatformCollisions(platforms, deltaTime) {
-    const buffer = 0.0001;
+    const buffer = 0.1;
     let wasInAir = !this.isOnGround;
     
-    // Only check platforms if we're falling
     if (this.velocity.y <= 0) return;
     
+    const collisionBox = {
+      x: this.x + this.collisionOffset.x,
+      y: this.y + this.collisionOffset.y,
+      width: this.collisionSize.width,
+      height: this.collisionSize.height
+    };
+
     for (let platform of platforms) {
-      if (platform.checkCollision(this, deltaTime)) {
+      if (this.isColliding(collisionBox, platform)) {
         this.velocity.y = 0;
-        this.y = platform.y - this.height - buffer;
+        this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
         this.isOnGround = true;
         
-        // If we just landed from being in the air
         if (wasInAir && this.movementState === 'falling') {
           this.land();
         }
-        
         return;
       }
     }
   }
+
+  isColliding(rect1, rect2) {
+    return (
+      rect1.x < rect2.x + rect2.width &&
+      rect1.x + rect1.width > rect2.x &&
+      rect1.y < rect2.y + rect2.height &&
+      rect1.y + rect1.height > rect2.y
+    );
+  }
   
-  // Check for collision with items like coins and cans
+  // In Player.js, modify checkItemCollisions:
   checkItemCollisions(itemLayer, itemType) {
-    // Calculate tile coordinates
     const tileSize = 16;
-    const playerCenterX = this.x + this.width / 2;
-    const playerBottom = this.y + this.height;
-    
-    const tileX = Math.floor(playerCenterX / tileSize);
-    const tileY = Math.floor(playerBottom / tileSize);
-    
-    // Check the tile at the player's position
-    if (
-      tileY >= 0 && tileY < itemLayer.length &&
-      tileX >= 0 && tileX < itemLayer[tileY].length &&
-      itemLayer[tileY][tileX] === 1
-    ) {
-      // Check if the item has already been collected
-      if (!gameStateManager.isItemCollected(itemType, tileX, tileY)) {
-        // Collect the item
-        if (itemType === 'coin') {
-          gameStateManager.addCoin();
-        } else if (itemType === 'can') {
-          gameStateManager.addCan();
+    // Check multiple points for better collision detection
+    const checkPoints = [
+      { x: this.x + this.width/2, y: this.y + this.height/2 }, // Center
+      { x: this.x, y: this.y }, // Top-left
+      { x: this.x + this.width, y: this.y } // Top-right
+    ];
+
+    for (let point of checkPoints) {
+      const tileX = Math.floor(point.x / tileSize);
+      const tileY = Math.floor(point.y / tileSize);
+      
+      if (tileY >= 0 && tileY < itemLayer.length &&
+          tileX >= 0 && tileX < itemLayer[tileY].length &&
+          itemLayer[tileY][tileX] === 1) {
+        
+        if (!gameStateManager.isItemCollected(itemType, tileX, tileY)) {
+          if (itemType === 'coin') gameStateManager.addCoin();
+          if (itemType === 'can') gameStateManager.addCan();
+          gameStateManager.markItemCollected(itemType, tileX, tileY);
+          itemLayer[tileY][tileX] = 0;
+          break; // Only collect once per frame
         }
-        
-        // Mark as collected
-        gameStateManager.markItemCollected(itemType, tileX, tileY);
-        
-        // Remove from layer (set to 0)
-        itemLayer[tileY][tileX] = 0;
       }
     }
   }

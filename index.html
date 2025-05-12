@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <link rel="icon" href="data:,"> <!-- Empty favicon to prevent 404 -->
     <title>2D Platformer</title>
     <style>
         * {
@@ -26,23 +27,27 @@
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+    
+    <!--
+    <div style="position: absolute; top: 10px; left: 10px; z-index: 100;">
+         <button onclick="gameStateManager.startGame()">Force Start Game</button>
+    </div>
+    -->
 
-    <!-- Core Systems (must load first) -->
+    <!-- Core Systems -->
     <script src="./classes/TimeManager.js"></script>
     <script src="./classes/SoundManager.js"></script>
     <script src="./classes/GameStateManager.js"></script>
-    
-    <!-- Utility Classes -->
+
+    <!-- Other Classes -->
     <script src="./classes/AnimationController.js"></script>
     <script src="./classes/CameraController.js"></script>
     <script src="./classes/GameRenderer.js"></script>
     <script src="./classes/HUD.js"></script>
-    
-    <!-- Game Objects -->
     <script src="./classes/CollisionBlock.js"></script>
     <script src="./classes/Platform.js"></script>
     <script src="./classes/Player.js"></script>
-    
+
     <!-- Utils -->
     <script src="./js/utils.js"></script>
     

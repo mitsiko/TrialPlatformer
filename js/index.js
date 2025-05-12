@@ -1,10 +1,42 @@
-const canvas = document.querySelector('canvas')
-const c = canvas.getContext('2d')
-const dpr = window.devicePixelRatio || 1
+// Get canvas and context
+const canvas = document.getElementById('gameCanvas');
+const c = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
 
-canvas.width = 1024 * dpr
-canvas.height = 576 * dpr
+// Set canvas size
+canvas.width = 1024 * dpr;
+canvas.height = 576 * dpr;
 
+// Initialize core systems
+const timeManager = new TimeManager();
+const soundManager = new SoundManager();
+const gameStateManager = new GameStateManager();
+
+// Add this right after: const gameStateManager = new GameStateManager();
+gameStateManager.onStateChange(gameStateManager.states.PLAYING, () => {
+  timeManager.resume();
+});
+
+gameStateManager.onStateChange(gameStateManager.states.PAUSED, () => {
+  timeManager.pause();
+});
+
+const cameraController = new CameraController(canvas, dpr); // Updated initialization
+const hud = new HUD();
+const gameRenderer = new GameRenderer();
+
+// Add state change listeners
+gameStateManager.onStateChange(gameStateManager.states.PLAYING, () => {
+    timeManager.resume();
+    soundManager.resumeMusic();
+});
+
+gameStateManager.onStateChange(gameStateManager.states.PAUSED, () => {
+    timeManager.pause();
+    soundManager.pauseMusic();
+});
+
+// Initialize your map data (keep this part exactly as is)
 const layersData = {
    l_BackgroundColor: l_BackgroundColor,
    l_Pines1: l_Pines1,
@@ -35,11 +67,10 @@ const tilesets = {
   l_Cans: { imageUrl: './images/CanSprite.png', tileSize: 16 },
 };
 
-
-// Tile setup
+// Tile setup (keep this exactly as is)
 const collisionBlocks = []
 const platforms = []
-const blockSize = 16 // Assuming each tile is 16x16 pixels
+const blockSize = 16
 
 collisions.forEach((row, y) => {
   row.forEach((symbol, x) => {
@@ -65,35 +96,25 @@ collisions.forEach((row, y) => {
 })
 
 const renderLayer = (tilesData, tilesetImage, tileSize, context) => {
-  // Calculate the number of tiles per row in the tileset
-  // We use Math.ceil to ensure we get a whole number of tiles
   const tilesPerRow = Math.ceil(tilesetImage.width / tileSize)
-
   tilesData.forEach((row, y) => {
     row.forEach((symbol, x) => {
       if (symbol !== 0) {
-        // Adjust index to be 0-based for calculations
         const tileIndex = symbol - 1
-
-        // Calculate source coordinates
         const srcX = (tileIndex % tilesPerRow) * tileSize
         const srcY = Math.floor(tileIndex / tilesPerRow) * tileSize
-
         context.drawImage(
-          tilesetImage, // source image
-          srcX,
-          srcY, // source x, y
-          tileSize,
-          tileSize, // source width, height
-          x * 16,
-          y * 16, // destination x, y
-          16,
-          16, // destination width, height
+          tilesetImage,
+          srcX, srcY,
+          tileSize, tileSize,
+          x * 16, y * 16,
+          16, 16
         )
       }
     })
   })
 }
+
 const renderStaticLayers = async () => {
   const offscreenCanvas = document.createElement('canvas')
   offscreenCanvas.width = canvas.width
@@ -105,81 +126,128 @@ const renderStaticLayers = async () => {
     if (tilesetInfo) {
       try {
         const tilesetImage = await loadImage(tilesetInfo.imageUrl)
-        renderLayer(
-          tilesData,
-          tilesetImage,
-          tilesetInfo.tileSize,
-          offscreenContext,
-        )
+        renderLayer(tilesData, tilesetImage, tilesetInfo.tileSize, offscreenContext)
       } catch (error) {
         console.error(`Failed to load image for layer ${layerName}:`, error)
       }
     }
   }
-
-  // Optionally draw collision blocks and platforms for debugging
-  // collisionBlocks.forEach(block => block.draw(offscreenContext));
-  // platforms.forEach((platform) => platform.draw(offscreenContext))
-
   return offscreenCanvas
 }
-// END - Tile setup
 
-// Change xy coordinates to move player's default position
+// Initialize player (keep your existing initialization)
 const player = new Player({
   x: 100,
   y: 100,
-  size: 16,
-  velocity: { x: 0, y: 0 },
-})
+  size: 32, // Make sure this matches your sprite size
+  velocity: { x: 0, y: 0 }
+});
 
 const keys = {
-  w: {
-    pressed: false,
-  },
-  a: {
-    pressed: false,
-  },
-  d: {
-    pressed: false,
-  },
+  w: { pressed: false },
+  a: { pressed: false },
+  d: { pressed: false }
 }
 
-let lastTime = performance.now()
-function animate(backgroundCanvas) {
-  // Calculate delta time
-  const currentTime = performance.now()
-  const deltaTime = (currentTime - lastTime) / 1000
-  lastTime = currentTime
+// MODIFIED GAME LOOP
+let lastTime = performance.now();
+async function animate(backgroundCanvas) {
+    const currentTime = performance.now();
+    const deltaTime = (currentTime - lastTime) / 1000; // Now properly defined
+    lastTime = currentTime;
+    
+    // Debug log - show game state and player info
+    console.log(`Frame - State: ${gameStateManager.currentState} | ` +
+              `Player: [X:${player.x.toFixed(1)}, Y:${player.y.toFixed(1)}] | ` +
+              `Velocity: [X:${player.velocity.x.toFixed(1)}, Y:${player.velocity.y.toFixed(1)}]`);
+  
+    // Clear canvas
+    c.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Update player position
-  player.handleInput(keys)
-  player.update(deltaTime, collisionBlocks)
-
-  // Render scene
-  c.save()
-  c.scale(dpr, dpr)
-  c.clearRect(0, 0, canvas.width, canvas.height)
-  c.drawImage(backgroundCanvas, 0, 0)
-  player.draw(c)
-  c.restore()
-
-  requestAnimationFrame(() => animate(backgroundCanvas))
-}
-
-const startRendering = async () => {
-  try {
-    const backgroundCanvas = await renderStaticLayers()
-    if (!backgroundCanvas) {
-      console.error('Failed to create the background canvas')
-      return
+    // Always update these systems regardless of game state
+    timeManager.update(deltaTime);
+    
+    // Only update gameplay elements when in PLAYING state
+    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        cameraController.update(player);
+        player.handleInput(keys);
+        player.update(deltaTime, collisionBlocks);
+        
+        // Check item collisions only when playing
+        player.checkItemCollisions(layersData.l_Coins, 'coin');
+        player.checkItemCollisions(layersData.l_Cans, 'can');
     }
 
-    animate(backgroundCanvas)
-  } catch (error) {
-    console.error('Error during rendering:', error)
-  }
+    // Apply camera transform
+    cameraController.applyTransform(c);
+    
+    // Draw background
+    c.drawImage(backgroundCanvas, 0, 0);
+    
+    // Draw player (always draw, even when paused)
+    player.draw(c);
+    
+    // Reset transform before UI
+    cameraController.resetTransform(c);
+    
+    // Always draw HUD
+    hud.draw(c);
+
+    // Continue the game loop
+    requestAnimationFrame(() => animate(backgroundCanvas));
 }
 
-startRendering()
+// MODIFIED START FUNCTION
+const startGame = async () => {
+  try {
+    console.log('Initializing game systems...');
+    
+    // Initialize systems (no deltaTime needed here)
+    await Promise.all([
+      hud.init(),
+      soundManager.init(),
+      gameStateManager.init()
+    ]);
+    
+    console.log('Loading map...');
+    const backgroundCanvas = await renderStaticLayers();
+    if (!backgroundCanvas) {
+      console.error('Failed to create background canvas');
+      return;
+    }
 
+    // Initialize camera with map bounds
+    const mapWidth = layersData.l_Collisions[0].length * 16;
+    const mapHeight = layersData.l_Collisions.length * 16;
+    cameraController.init(mapWidth, mapHeight);
+    
+    console.log('Starting game loop...');
+    
+    // Initialize time tracking for game loop
+    lastTime = performance.now();
+    
+    // Start game loop
+    animate(backgroundCanvas);
+    
+    // Set initial game state
+    gameStateManager.changeState(gameStateManager.states.INTRO);
+
+    document.addEventListener('keydown', (e) => {
+        if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+            gameStateManager.changeState(gameStateManager.states.PLAYING);
+            soundManager.playMusic('intro');
+        }
+    });
+    
+  } catch (error) {
+    console.error('Game initialization failed:', error);
+    // Add more detailed error logging
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack
+    });
+  }
+};
+
+// Start the game
+startGame();

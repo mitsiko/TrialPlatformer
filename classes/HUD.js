@@ -10,7 +10,7 @@ class HUD {
     // Font settings
     this.fontFamily = 'monospace'; // Use monospace as a pixel font alternative
     this.fontSize = 16;
-    this.fontColor = '#FFFDD0'; // Cream color
+    this.fontColor = '#FFFFFF'; // Cream color
   }
   
   async init() {
@@ -130,5 +130,3 @@ class HUD {
   }
 }
 
-// Export a singleton instance
-const hud = new HUD();

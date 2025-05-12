@@ -159,5 +159,3 @@ class GameRenderer {
   }
 }
 
-// Export a singleton instance
-const gameRenderer = new GameRenderer();

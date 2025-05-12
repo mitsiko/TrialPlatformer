@@ -13,13 +13,13 @@ class SoundManager {
     // Load all sounds and music
     this.loadMusic('intro', 'sounds/mostlyChimesTrimmed.mp3');
     this.loadMusic('win', 'sounds/winningTrimmed.mp3');
-    this.loadMusic('gameOver', 'sounds/faltliningTrimmed.mp3');
+    this.loadMusic('gameOver', 'sounds/flatliningTrimmed.mp3');
     
     // Load sound effects
-    this.loadSound('jump', 'sounds/jump.mp3');
-    this.loadSound('coin', 'sounds/coin.mp3');
-    this.loadSound('can', 'sounds/can.mp3');
-    this.loadSound('hurt', 'sounds/hurt.mp3');
+    this.loadSound('jump', 'sounds/jumping.mp3');
+    this.loadSound('coin', 'sounds/coinDropTrimmed.mp3');
+    this.loadSound('can', 'sounds/metalTrimmed.mp3');
+    this.loadSound('hurt', 'sounds/landingTrimmed.mp3');
     
     this.initialized = true;
   }
@@ -52,18 +52,25 @@ class SoundManager {
   }
   
   playMusic(name) {
-    if (!this.initialized) return;
-    
-    // Stop current music if any
-    this.stopMusic();
-    
+    // Stop any currently playing music first
+    if (this.currentMusic && this.music[this.currentMusic]) {
+      this.music[this.currentMusic].pause();
+    }
+
     const music = this.music[name];
     if (music) {
       music.currentTime = 0;
-      music.play();
+      music.play().catch(e => {
+        console.log("Audio play prevented:", e);
+        // Implement audio play promise handling
+        document.addEventListener('click', () => {
+          music.play().catch(e => console.log("Still prevented:", e));
+        }, { once: true });
+      });
       this.currentMusic = name;
     }
   }
+
   
   stopMusic() {
     if (this.currentMusic && this.music[this.currentMusic]) {
@@ -104,5 +111,3 @@ class SoundManager {
   }
 }
 
-// Export a singleton instance
-const soundManager = new SoundManager();
