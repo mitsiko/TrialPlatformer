@@ -90,22 +90,30 @@ class AnimationController {
   update(deltaTime) {
     if (!this.isPlaying || !this.currentAnimation) return;
     
-    const animation = this.animations[this.currentAnimation];
     this.frameTimer += deltaTime;
     
     if (this.frameTimer >= this.frameDuration) {
       this.frameTimer = 0;
       this.currentFrame++;
       
-      if (this.currentFrame >= animation.frameCount) {
-        if (this.isLooping) {
+      // Animation complete handling
+      if (this.currentFrame >= this.animations[this.currentAnimation].frameCount) {
+        const shouldLoop = this.isLooping;
+        const callback = this.onAnimationComplete;
+        
+        if (shouldLoop) {
           this.currentFrame = 0;
         } else {
-          this.currentFrame = animation.frameCount - 1;
+          this.currentFrame = this.animations[this.currentAnimation].frameCount - 1;
           this.isPlaying = false;
-          if (this.onAnimationComplete) {
-            this.onAnimationComplete(); // Ensure this gets called
-          }
+        }
+        
+        // Execute callback after state is updated
+        if (callback && !shouldLoop) {
+          requestAnimationFrame(() => {
+            callback();
+            this.onAnimationComplete = null; // Clear after firing
+          });
         }
       }
     }
@@ -168,4 +176,3 @@ class AnimationController {
     }
   }
 }
-

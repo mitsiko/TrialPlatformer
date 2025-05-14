@@ -8,13 +8,15 @@ const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
 
 class Player {
-  constructor({ x, y, size, velocity = { x: 0, y: 0 } }) {
-    this.x = x;
-    this.y = y;
-    this.width = size;
-    this.height = size;
-    this.velocity = velocity;
+    constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
+    this.x = x
+    this.y = y
+    this.width = size
+    this.height = size  
+    this.velocity = velocity; // Now properly initialized
     this.isOnGround = false;
+
+    
     this.direction = 1; // 1 for right, -1 for left
     
     // Movement state
@@ -40,29 +42,29 @@ class Player {
     this.animation.init();
   
 
+    // Updated collision properties
     this.collisionOffset = {
-      x: 20 ,       // Horizontal offset
-      y: size * 1  // Move collision box DOWN (negative Y moves it downward)
+      x: size * 0.15,  // 15% from left
+      y: size * 0.1    // 10% from top
     };
-    
     this.collisionSize = {
       width: size * 0.7,
-      height: size * 1  // Make collision box shorter
+      height: size * 0.9  // 90% of player height
     };
   }
 
+
   draw(c) {
-    // Skip drawing if blinking during invincibility
     if (this.isInvincible && !this.isVisible) return;
     
-    // Draw animation centered on player
-    this.animation.draw(
-      c, 
-      this.x + this.width/2,  // Center X
-      this.y + this.height    // Anchor at feet
-    );
+    // Calculate actual draw position
+    const drawX = this.x + this.width/2;
+    const drawY = this.y + this.height; // Anchor at feet
     
-    // DEBUG: Draw collision box (remove after testing)
+    // Draw animation centered horizontally
+    this.animation.draw(c, drawX, drawY);
+    
+    // DEBUG: Draw collision box
     c.fillStyle = 'rgba(255, 0, 0, 0.3)';
     c.fillRect(
       this.x + this.collisionOffset.x,
@@ -70,62 +72,81 @@ class Player {
       this.collisionSize.width,
       this.collisionSize.height
     );
+
+    // DEBUG: Draw feet position
+    c.fillStyle = 'blue';
+    c.fillRect(
+      this.x + this.collisionOffset.x + this.collisionSize.width/2 - 2,
+      this.y + this.collisionOffset.y + this.collisionSize.height - 2,
+      4, 4
+    );
+
+    // DEBUG: Draw center point
+    c.fillStyle = 'green';
+    c.fillRect(
+      this.x + this.width/2 - 2,
+      this.y + this.height/2 - 2,
+      4, 4
+    );
   }
 
-  update(deltaTime, collisionBlocks) {
-    console.log(`State: ${this.movementState} | ` +
-           `InputLocked: ${this.inputLocked} | ` +
-           `OnGround: ${this.isOnGround} | ` +
-           `Anim: ${this.animation.currentAnimation}`);
-
+  update(deltaTime, collisionBlocks, platforms) {
     if (!deltaTime) return;
-    
-    // Update animation
+
+    // Update animation first
     this.animation.update(deltaTime);
-    if (this.movementState === 'landing' && 
-        this.animation.currentAnimation === 'landing' &&
-        this.animation.currentFrame >= 3) { // Force-complete on last frame
-      this.animation.forceComplete();
-    }
 
-    if (this.movementState === 'landing') {
-      console.log(`Landing progress: ${this.animation.currentFrame+1}/5 frames | ` +
-                `Timer: ${this.animation.frameTimer.toFixed(3)}/${this.animation.frameDuration}`);
-    }
-
-    
     // Update invincibility state
     this.updateInvincibility(deltaTime);
-    
-    // Only apply gravity and movement if not in death state
-    if (this.movementState !== 'death') {
-      this.applyGravity(deltaTime);
 
+    // Apply gravity if not grounded
+    if (!this.isOnGround) {
+      this.applyGravity(deltaTime);
       if (this.velocity.y > 500) this.velocity.y = 500;
-      
-      // Update fall tracking for fall damage
+    }
+
+    // Only process movement if not in death state
+    if (this.movementState !== 'death') {
+      // Update fall tracking
       this.updateFallTracking();
       
-      // Update horizontal position only if movement is not locked
+      // Handle input if not locked
       if (!this.inputLocked) {
-        this.updateHorizontalPosition(deltaTime);
+        this.handleInput(keys);
       }
-      
+
+      // Add this check to prevent landing state from persisting
+      if (this.movementState === 'landing' && this.animation.isComplete() && this.isOnGround) {
+        this.inputLocked = false;
+        if (keys.a.pressed || keys.d.pressed) {
+          this.movementState = 'running';
+          this.animation.play('running', true);
+        } else {
+          this.movementState = 'idle';
+          this.animation.play('idle', true);
+        }
+      }
+
+      // Update horizontal position and check collisions
+      this.x += this.velocity.x * deltaTime;
       this.checkForHorizontalCollisions(collisionBlocks);
+
+      // Check platform collisions
       this.checkPlatformCollisions(platforms, deltaTime);
-      this.updateVerticalPosition(deltaTime);
+
+      // Update vertical position and check collisions
+      this.y += this.velocity.y * deltaTime;
       this.checkForVerticalCollisions(collisionBlocks);
-      
-      // Check for falling out of bounds
+
+      // Check bounds
       if (this.y > canvas.height / dpr + 40) {
         this.die();
       }
-      
+
       // Update movement state
       this.updateMovementState();
     }
   }
-  
   updateInvincibility(deltaTime) {
     if (this.isInvincible) {
       this.invincibilityTimer += deltaTime;
@@ -201,25 +222,28 @@ class Player {
       soundManager.playSound('jump');
     }
   }
-  
+    
   land() {
-    if (this.movementState === 'falling') {
-      console.log("Starting 5-frame landing animation");
-      this.movementState = 'landing';
-      this.inputLocked = true;
+    // Prevent duplicate landings
+    if (this.movementState === 'landing') return;
+    
+    console.log("Triggering landing animation");
+    this.movementState = 'landing';
+    this.inputLocked = true;
+    
+    this.animation.play('landing', false, 0.1, () => {
+      console.log("Landing animation completed");
+      this.inputLocked = false;
       
-      this.animation.play('landing', false, 0.08, () => { // Faster 0.08s per frame
-        console.log("Landing animation completed");
-        this.inputLocked = false;
-        
-        // Emergency fallback in case callback fires early
-        if (this.animation.currentFrame < 4) {
-          this.animation.forceComplete();
-        }
-        
-        this.movementState = this.velocity.x !== 0 ? 'running' : 'idle';
-      });
-    }
+      // Check current input to determine next state
+      if (keys.a.pressed || keys.d.pressed) {
+        this.movementState = 'running';
+        this.animation.play('running', true);
+      } else {
+        this.movementState = 'idle';
+        this.animation.play('idle', true);
+      }
+    });
   }
   
   takeDamage() {
@@ -285,22 +309,36 @@ class Player {
           this.velocity.x = -X_VELOCITY;
           this.direction = -1;
           this.animation.setDirection(-1);
-      }
-      
-      if (keys.d.pressed) {
+          
+          // Immediately update state if grounded
+          if (this.isOnGround && this.movementState !== 'running') {
+              this.movementState = 'running';
+              this.animation.play('running', true);
+          }
+      } else if (keys.d.pressed) {
           console.log("Applying RIGHT movement");
           this.velocity.x = X_VELOCITY;
           this.direction = 1;
           this.animation.setDirection(1);
+          
+          // Immediately update state if grounded
+          if (this.isOnGround && this.movementState !== 'running') {
+              this.movementState = 'running';
+              this.animation.play('running', true);
+          }
+      } else if (this.isOnGround && this.movementState !== 'idle') {
+          // If no movement keys pressed and grounded
+          this.movementState = 'idle';
+          this.animation.play('idle', true);
       }
       
       console.log("Final velocity:", this.velocity);
   }
   
   updateMovementState() {
-    // Skip if in special states
+    // Skip if in special states that handle their own transitions
     if (this.movementState === 'death' || 
-        this.movementState === 'landing') {
+        this.movementState === 'landing' && !this.animation.isComplete()) {
       return;
     }
 
@@ -320,11 +358,15 @@ class Player {
       return;
     }
 
-    // Grounded states
+    // Grounded states - only transition if not in landing animation
+    if (this.movementState === 'landing' && !this.animation.isComplete()) {
+      return;
+    }
+
     if (this.velocity.x !== 0) {
       if (this.movementState !== 'running') {
         this.movementState = 'running';
-        this.animation.play('running', true, 0.1);
+        this.animation.play('running', true);
       }
     } else {
       if (this.movementState !== 'idle') {
@@ -334,9 +376,8 @@ class Player {
     }
   }
 
-
   checkForHorizontalCollisions(collisionBlocks) {
-    const buffer = 0.1;
+    const buffer = 0.0001;
     const collisionBox = {
       x: this.x + this.collisionOffset.x,
       y: this.y + this.collisionOffset.y,
@@ -360,41 +401,45 @@ class Player {
   }
 
   checkForVerticalCollisions(collisionBlocks) {
-    const buffer = 0.1;
+    const buffer = 0.0001;
     let wasInAir = !this.isOnGround;
     this.isOnGround = false;
 
-    const feetY = this.y + this.height + this.collisionOffset.y;
-    const headY = this.y + this.collisionOffset.y;
+    const collisionBox = {
+      x: this.x + this.collisionOffset.x,
+      y: this.y + this.collisionOffset.y,
+      width: this.collisionSize.width,
+      height: this.collisionSize.height
+    };
 
     for (let block of collisionBlocks) {
-      // Check if player is landing (from above)
-      if (this.velocity.y > 0 && feetY <= block.y + buffer && feetY >= block.y) {
-        if (this.x + this.width > block.x && this.x < block.x + block.width) {
-          this.y = block.y - this.height - this.collisionOffset.y - buffer;
+      if (this.isColliding(collisionBox, block)) {
+        // Head collision (from below)
+        if (this.velocity.y < 0) {
           this.velocity.y = 0;
+          this.y = block.y + block.height - this.collisionOffset.y + buffer;
+          break;
+        }
+        // Landing collision (from above)
+        if (this.velocity.y > 0) {
+          this.velocity.y = 0;
+          this.y = block.y - this.collisionSize.height - this.collisionOffset.y - buffer;
           this.isOnGround = true;
           if (wasInAir) this.land();
           break;
         }
       }
-      
-      // Check if player hits ceiling (from below)
-      if (this.velocity.y < 0 && headY >= block.y + block.height - buffer) {
-        if (this.x + this.width > block.x && this.x < block.x + block.width) {
-          this.y = block.y + block.height - this.collisionOffset.y + buffer;
-          this.velocity.y = 0;
-          break;
-        }
-      }
     }
   }
+
   checkPlatformCollisions(platforms, deltaTime) {
-    const buffer = 0.1;
+    const buffer = 0.0001;
     let wasInAir = !this.isOnGround;
+    this.isOnGround = false; // Reset before checking
     
+    // Only check if moving downward
     if (this.velocity.y <= 0) return;
-    
+
     const collisionBox = {
       x: this.x + this.collisionOffset.x,
       y: this.y + this.collisionOffset.y,
@@ -404,14 +449,19 @@ class Player {
 
     for (let platform of platforms) {
       if (this.isColliding(collisionBox, platform)) {
-        this.velocity.y = 0;
-        this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
-        this.isOnGround = true;
-        
-        if (wasInAir && this.movementState === 'falling') {
-          this.land();
+        // More precise landing check - must be coming from above
+        if (this.y + this.height <= platform.y + platform.height && 
+            this.velocity.y > 0) {
+          this.velocity.y = 0;
+          this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
+          this.isOnGround = true;
+          
+          // Only trigger landing if we were in air and not already landing
+          if (wasInAir && this.movementState !== 'landing') {
+            this.land();
+          }
+          return;
         }
-        return;
       }
     }
   }

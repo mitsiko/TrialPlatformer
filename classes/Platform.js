@@ -10,9 +10,8 @@ class Platform {
     c.fillStyle = 'rgba(255, 0, 0, 0.5)'
     c.fillRect(this.x, this.y, this.width, this.height)
   }
-
+  
   checkCollision(player, deltaTime) {
-    // Check only top-side collision
     return (
       player.y + player.height <= this.y &&
       player.y + player.height + player.velocity.y * deltaTime >= this.y &&

@@ -129,4 +129,3 @@ class HUD {
     context.fillText(timerText, startX + iconSize + 5, startY + iconSize - 2);
   }
 }
-

@@ -72,6 +72,9 @@ const collisionBlocks = []
 const platforms = []
 const blockSize = 16
 
+let lastTime = performance.now();
+
+
 collisions.forEach((row, y) => {
   row.forEach((symbol, x) => {
     if (symbol === 1) {
@@ -150,7 +153,6 @@ const keys = {
 }
 
 // MODIFIED GAME LOOP
-let lastTime = performance.now();
 async function animate(backgroundCanvas) {
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000; // Now properly defined
@@ -171,7 +173,8 @@ async function animate(backgroundCanvas) {
     if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
         cameraController.update(player);
         player.handleInput(keys);
-        player.update(deltaTime, collisionBlocks);
+        player.update(deltaTime, collisionBlocks, platforms);
+
         
         // Check item collisions only when playing
         player.checkItemCollisions(layersData.l_Coins, 'coin');

@@ -158,4 +158,3 @@ class GameRenderer {
     context.restore();
   }
 }
-
