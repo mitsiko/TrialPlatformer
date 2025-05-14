@@ -8,14 +8,13 @@ const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
 
 class Player {
-    constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
-    this.x = x
-    this.y = y
-    this.width = size
-    this.height = size  
-    this.velocity = velocity; // Now properly initialized
+  constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
+    this.x = x;
+    this.y = y;
+    this.width = size;
+    this.height = size;  
+    this.velocity = { x: 0, y: 0 }; // Properly initialize velocity object
     this.isOnGround = false;
-
     
     this.direction = 1; // 1 for right, -1 for left
     
@@ -38,10 +37,6 @@ class Player {
     // Create animation controller
     this.animation = new AnimationController();
     
-    // Initialize animation states
-    this.animation.init();
-  
-
     // Updated collision properties
     this.collisionOffset = {
       x: size * 0.15,  // 15% from left
@@ -51,8 +46,19 @@ class Player {
       width: size * 0.7,
       height: size * 0.9  // 90% of player height
     };
+    
+    console.log("Player initialized");
   }
 
+  async init() {
+    // Initialize animation states
+    await this.animation.init();
+    console.log("Player animations initialized");
+    
+    // Make sure we start with the idle animation
+    this.movementState = 'idle';
+    this.animation.play('idle', true);
+  }
 
   draw(c) {
     if (this.isInvincible && !this.isVisible) return;
@@ -102,7 +108,7 @@ class Player {
     // Apply gravity if not grounded
     if (!this.isOnGround) {
       this.applyGravity(deltaTime);
-      if (this.velocity.y > 500) this.velocity.y = 500;
+      if (this.velocity.y > 500) this.velocity.y = 500; // Terminal velocity
     }
 
     // Only process movement if not in death state
@@ -115,16 +121,10 @@ class Player {
         this.handleInput(keys);
       }
 
-      // Add this check to prevent landing state from persisting
-      if (this.movementState === 'landing' && this.animation.isComplete() && this.isOnGround) {
+      // Check if landing animation has completed
+      if (this.movementState === 'landing' && this.animation.isComplete()) {
         this.inputLocked = false;
-        if (keys.a.pressed || keys.d.pressed) {
-          this.movementState = 'running';
-          this.animation.play('running', true);
-        } else {
-          this.movementState = 'idle';
-          this.animation.play('idle', true);
-        }
+        this.transitionFromLanding();
       }
 
       // Update horizontal position and check collisions
@@ -147,6 +147,19 @@ class Player {
       this.updateMovementState();
     }
   }
+
+  transitionFromLanding() {
+    console.log("Transitioning from landing state");
+    
+    if (keys.a.pressed || keys.d.pressed) {
+      this.movementState = 'running';
+      this.animation.play('running', true);
+    } else {
+      this.movementState = 'idle';
+      this.animation.play('idle', true);
+    }
+  }
+  
   updateInvincibility(deltaTime) {
     if (this.isInvincible) {
       this.invincibilityTimer += deltaTime;
@@ -165,6 +178,7 @@ class Player {
       }
     }
   }
+  
   
   updateFallTracking() {
     // Start tracking fall if moving downward and not on ground
@@ -191,8 +205,11 @@ class Player {
     }
   }
 
+
   jump() {
     if (this.isOnGround && this.canJump && !this.inputLocked) {
+      console.log("Jump executed");
+      
       this.velocity.y = -JUMP_POWER;
       this.isOnGround = false;
       this.canJump = false;
@@ -201,15 +218,20 @@ class Player {
       // Play jump animation (non-looping)
       this.animation.play('jumping', false, 0.1, () => {
         // When jump animation completes, transition to falling
+        this.movementState = 'falling';
         this.animation.play('falling', true);
       });
       
-      soundManager.playSound('jump');
+      // Could play jump sound here if available
+      // soundManager.playSound('jump');
     }
   }
   
+  
   verticalHop() {
     if (this.isOnGround && this.canJump && !this.inputLocked) {
+      console.log("Vertical hop executed");
+      
       this.velocity.y = -VERTICAL_HOP_POWER;
       this.isOnGround = false;
       this.canJump = false;
@@ -219,7 +241,8 @@ class Player {
       // Play falling animation for the hop
       this.animation.play('falling', true);
       
-      soundManager.playSound('jump');
+      // Could play jump sound here
+      // soundManager.playSound('jump');
     }
   }
     
@@ -234,15 +257,7 @@ class Player {
     this.animation.play('landing', false, 0.1, () => {
       console.log("Landing animation completed");
       this.inputLocked = false;
-      
-      // Check current input to determine next state
-      if (keys.a.pressed || keys.d.pressed) {
-        this.movementState = 'running';
-        this.animation.play('running', true);
-      } else {
-        this.movementState = 'idle';
-        this.animation.play('idle', true);
-      }
+      this.transitionFromLanding();
     });
   }
   
@@ -250,15 +265,13 @@ class Player {
     // Skip if already invincible
     if (this.isInvincible) return;
     
-    // Remove a life
-    gameStateManager.removeLife();
-    
-    // Start invincibility
-    this.isInvincible = true;
-    this.invincibilityTimer = 0;
+    // Remove a life if GameStateManager exists
+    if (typeof gameStateManager !== 'undefined') {
+      gameStateManager.removeLife();
+    }
     
     // If player is still alive, make them invincible temporarily
-    if (gameStateManager.lives > 0) {
+    if (typeof gameStateManager !== 'undefined' && gameStateManager.lives > 0) {
       this.isInvincible = true;
       this.invincibilityTimer = 0;
     } else {
@@ -276,11 +289,18 @@ class Player {
     this.animation.play('death', true);
     
     // Transition to game over state after a delay
-    timeManager.setTimeout(() => {
-      gameStateManager.changeState(gameStateManager.states.GAME_OVER);
-    }, 3);
+    if (typeof timeManager !== 'undefined' && typeof gameStateManager !== 'undefined') {
+      timeManager.setTimeout(() => {
+        gameStateManager.changeState(gameStateManager.states.GAME_OVER);
+      }, 3);
+    }
   }
 
+  applyGravity(deltaTime) {
+    this.velocity.y += GRAVITY * deltaTime;
+  }
+
+  /*
   updateHorizontalPosition(deltaTime) {
     this.x += this.velocity.x * deltaTime;
   }
@@ -288,53 +308,52 @@ class Player {
   updateVerticalPosition(deltaTime) {
     this.y += this.velocity.y * deltaTime;
   }
-
-  applyGravity(deltaTime) {
-    this.velocity.y += GRAVITY * deltaTime;
-  }
+  */
 
   handleInput(keys) {
-      console.log("Handling input - Current keys state:", keys);
-      
-      if (this.inputLocked) {
-          console.log("Input locked - ignoring");
-          return;
-      }
+    if (!keys) return;
+    
+    console.log("Handling input - Current keys state:", keys);
+    
+    if (this.inputLocked) {
+      console.log("Input locked - ignoring");
+      return;
+    }
 
-      // Reset horizontal velocity
-      this.velocity.x = 0;
+    // Reset horizontal velocity
+    this.velocity.x = 0;
 
-      if (keys.a.pressed) {
-          console.log("Applying LEFT movement");
-          this.velocity.x = -X_VELOCITY;
-          this.direction = -1;
-          this.animation.setDirection(-1);
-          
-          // Immediately update state if grounded
-          if (this.isOnGround && this.movementState !== 'running') {
-              this.movementState = 'running';
-              this.animation.play('running', true);
-          }
-      } else if (keys.d.pressed) {
-          console.log("Applying RIGHT movement");
-          this.velocity.x = X_VELOCITY;
-          this.direction = 1;
-          this.animation.setDirection(1);
-          
-          // Immediately update state if grounded
-          if (this.isOnGround && this.movementState !== 'running') {
-              this.movementState = 'running';
-              this.animation.play('running', true);
-          }
-      } else if (this.isOnGround && this.movementState !== 'idle') {
-          // If no movement keys pressed and grounded
-          this.movementState = 'idle';
-          this.animation.play('idle', true);
-      }
+    if (keys.a.pressed) {
+      console.log("Applying LEFT movement");
+      this.velocity.x = -X_VELOCITY;
+      this.direction = -1;
+      this.animation.setDirection(-1);
       
-      console.log("Final velocity:", this.velocity);
+      // Immediately update state if grounded
+      if (this.isOnGround && this.movementState !== 'running') {
+        this.movementState = 'running';
+        this.animation.play('running', true);
+      }
+    } else if (keys.d.pressed) {
+      console.log("Applying RIGHT movement");
+      this.velocity.x = X_VELOCITY;
+      this.direction = 1;
+      this.animation.setDirection(1);
+      
+      // Immediately update state if grounded
+      if (this.isOnGround && this.movementState !== 'running') {
+        this.movementState = 'running';
+        this.animation.play('running', true);
+      }
+    } else if (this.isOnGround && this.movementState !== 'idle' && this.movementState !== 'landing') {
+      // If no movement keys pressed and grounded
+      this.movementState = 'idle';
+      this.animation.play('idle', true);
+    }
+    
+    console.log("Final velocity:", this.velocity, "Movement state:", this.movementState);
   }
-  
+
   updateMovementState() {
     // Skip if in special states that handle their own transitions
     if (this.movementState === 'death' || 
@@ -345,11 +364,20 @@ class Player {
     // Airborne states
     if (!this.isOnGround) {
       if (this.velocity.y < 0) {
+        // Only change to jumping if not already in that state
         if (this.movementState !== 'jumping') {
           this.movementState = 'jumping';
-          this.animation.play('jumping', false);
+          if (this.animation.currentAnimation !== 'jumping') {
+            this.animation.play('jumping', false, 0.1, () => {
+              if (this.velocity.y > 0) {
+                this.movementState = 'falling';
+                this.animation.play('falling', true);
+              }
+            });
+          }
         }
       } else {
+        // Only change to falling if not already in that state
         if (this.movementState !== 'falling') {
           this.movementState = 'falling';
           this.animation.play('falling', true);
@@ -358,20 +386,23 @@ class Player {
       return;
     }
 
-    // Grounded states - only transition if not in landing animation
+    // Don't override landing animation until it's complete
     if (this.movementState === 'landing' && !this.animation.isComplete()) {
       return;
     }
 
-    if (this.velocity.x !== 0) {
-      if (this.movementState !== 'running') {
-        this.movementState = 'running';
-        this.animation.play('running', true);
-      }
-    } else {
-      if (this.movementState !== 'idle') {
-        this.movementState = 'idle';
-        this.animation.play('idle', true);
+    // Grounded states
+    if (this.isOnGround) {
+      if (this.velocity.x !== 0) {
+        if (this.movementState !== 'running') {
+          this.movementState = 'running';
+          this.animation.play('running', true);
+        }
+      } else {
+        if (this.movementState !== 'idle') {
+          this.movementState = 'idle';
+          this.animation.play('idle', true);
+        }
       }
     }
   }
@@ -390,10 +421,12 @@ class Player {
         // Left collision
         if (this.velocity.x < 0) {
           this.x = block.x + block.width - this.collisionOffset.x + buffer;
+          this.velocity.x = 0;
         }
         // Right collision
         else if (this.velocity.x > 0) {
           this.x = block.x - this.collisionSize.width - this.collisionOffset.x - buffer;
+          this.velocity.x = 0;
         }
         break;
       }
@@ -425,7 +458,13 @@ class Player {
           this.velocity.y = 0;
           this.y = block.y - this.collisionSize.height - this.collisionOffset.y - buffer;
           this.isOnGround = true;
-          if (wasInAir) this.land();
+          this.canJump = true; // Reset ability to jump
+          
+          // Only trigger landing animation if we were previously in air
+          // and we're in a falling state (not jumping)
+          if (wasInAir && this.movementState === 'falling') {
+            this.land();
+          }
           break;
         }
       }
@@ -435,8 +474,8 @@ class Player {
   checkPlatformCollisions(platforms, deltaTime) {
     const buffer = 0.0001;
     let wasInAir = !this.isOnGround;
-    this.isOnGround = false; // Reset before checking
     
+    // Don't reset isOnGround here; it might be set by solid collision checks
     // Only check if moving downward
     if (this.velocity.y <= 0) return;
 
@@ -448,20 +487,18 @@ class Player {
     };
 
     for (let platform of platforms) {
-      if (this.isColliding(collisionBox, platform)) {
-        // More precise landing check - must be coming from above
-        if (this.y + this.height <= platform.y + platform.height && 
-            this.velocity.y > 0) {
-          this.velocity.y = 0;
-          this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
-          this.isOnGround = true;
-          
-          // Only trigger landing if we were in air and not already landing
-          if (wasInAir && this.movementState !== 'landing') {
-            this.land();
-          }
-          return;
+      // Use platform's own collision check function
+      if (platform.checkCollision(this, deltaTime)) {
+        this.velocity.y = 0;
+        this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
+        this.isOnGround = true;
+        this.canJump = true; // Reset ability to jump
+        
+        // Only trigger landing if we were in air and in falling state
+        if (wasInAir && this.movementState === 'falling') {
+          this.land();
         }
+        return;
       }
     }
   }
@@ -474,6 +511,7 @@ class Player {
       rect1.y + rect1.height > rect2.y
     );
   }
+
   
   // In Player.js, modify checkItemCollisions:
   checkItemCollisions(itemLayer, itemType) {

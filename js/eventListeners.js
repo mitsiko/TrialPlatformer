@@ -3,12 +3,12 @@ console.log("Initializing event listeners...");
 
 window.addEventListener('keydown', (event) => {
     // Allow any key to start game from intro
-    if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+    if (gameStateManager && gameStateManager.currentState === gameStateManager.states.INTRO) {
       gameStateManager.startGame();
       return;
     }
     
-    if (gameStateManager.currentState !== gameStateManager.states.PLAYING) {
+    if (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING) {
         console.log("Ignoring input - game not in PLAYING state");
         return;
     }
@@ -16,11 +16,16 @@ window.addEventListener('keydown', (event) => {
     switch (event.key.toLowerCase()) {
         case 'w':
         case 'arrowup':
-            console.log("Jump attempted");
-            if (player.isOnGround) {
+            console.log("Jump key pressed");
+            // Handle jumping logic here
+            if (keys.a.pressed || keys.d.pressed) {
+                // Directional jump
                 player.jump();
-                keys.w.pressed = true;
+            } else {
+                // Vertical hop
+                player.verticalHop();
             }
+            keys.w.pressed = true;
             break;
             
         case 'a':
@@ -37,7 +42,7 @@ window.addEventListener('keydown', (event) => {
             
         case 'escape':
             console.log("Pause toggled");
-            // Pause logic remains same
+            // Pause logic handled elsewhere
             break;
     }
 });

@@ -1,4 +1,5 @@
-// ./classes/AnimationController.js - Handles sprite animations for the player
+// ./classes/AnimationController.js
+// AnimationController.js - Handles sprite animations for the player
 class AnimationController {
   constructor() {
     this.animations = {};
@@ -90,22 +91,30 @@ class AnimationController {
   update(deltaTime) {
     if (!this.isPlaying || !this.currentAnimation) return;
     
-    const animation = this.animations[this.currentAnimation];
     this.frameTimer += deltaTime;
     
     if (this.frameTimer >= this.frameDuration) {
       this.frameTimer = 0;
       this.currentFrame++;
       
-      if (this.currentFrame >= animation.frameCount) {
-        if (this.isLooping) {
+      // Animation complete handling
+      if (this.currentFrame >= this.animations[this.currentAnimation].frameCount) {
+        const shouldLoop = this.isLooping;
+        const callback = this.onAnimationComplete;
+        
+        if (shouldLoop) {
           this.currentFrame = 0;
         } else {
-          this.currentFrame = animation.frameCount - 1;
+          this.currentFrame = this.animations[this.currentAnimation].frameCount - 1;
           this.isPlaying = false;
-          if (this.onAnimationComplete) {
-            this.onAnimationComplete(); // Ensure this gets called
-          }
+        }
+        
+        // Execute callback after state is updated
+        if (callback && !shouldLoop) {
+          requestAnimationFrame(() => {
+            callback();
+            this.onAnimationComplete = null; // Clear after firing
+          });
         }
       }
     }
@@ -169,87 +178,8 @@ class AnimationController {
   }
 }
 
-// ./classes/CameraControlller.js
-class CameraController {
-  constructor(canvas, dpr) {
-    this.x = 0;
-    this.y = 0;
-    this.width = canvas.width / dpr;
-    this.height = canvas.height / dpr;
-    
-    // Camera center threshold values
-    this.centerX = 320; // Horizontal center threshold
-    this.centerY = 170; // Vertical center threshold
-    
-    // Map bounds (should be set after map is loaded)
-    this.mapWidth = 0;
-    this.mapHeight = 0;
-    
-    // Smoothing factor (0 = instant, 1 = no movement)
-    this.smoothing = 0.1;
-  }
-  
-  init(mapWidth, mapHeight) {
-    this.mapWidth = mapWidth;
-    this.mapHeight = mapHeight;
-  }
-  
-  update(player) {
-    // Calculate target position (where the camera wants to be)
-    let targetX = player.x - this.centerX;
-    let targetY = player.y - this.centerY;
-    
-    // Apply smoothing using lerp
-    if (this.smoothing > 0) {
-      this.x += (targetX - this.x) * (1 - this.smoothing);
-      this.y += (targetY - this.y) * (1 - this.smoothing);
-    } else {
-      this.x = targetX;
-      this.y = targetY;
-    }
-    
-    // Clamp to map bounds
-    this.x = Math.max(0, Math.min(this.x, this.mapWidth - this.width));
-    this.y = Math.max(0, Math.min(this.y, this.mapHeight - this.height));
-  }
-  
-  // Apply camera transformation to context
-  applyTransform(context) {
-    context.save();
-    context.translate(-Math.floor(this.x), -Math.floor(this.y));
-  }
-  
-  // Restore context transformation
-  resetTransform(context) {
-    context.restore();
-  }
-  
-  // Convert world coordinates to screen coordinates
-  worldToScreen(worldX, worldY) {
-    return {
-      x: worldX - this.x,
-      y: worldY - this.y
-    };
-  }
-  
-  // Convert screen coordinates to world coordinates
-  screenToWorld(screenX, screenY) {
-    return {
-      x: screenX + this.x,
-      y: screenY + this.y
-    };
-  }
-  
-  // Check if a world coordinate is visible on screen
-  isVisible(worldX, worldY, width = 0, height = 0) {
-    return (
-      worldX + width >= this.x &&
-      worldX <= this.x + this.width &&
-      worldY + height >= this.y &&
-      worldY <= this.y + this.height
-    );
-  }
-}
+
+
 // ./classes/CollisionBlock.js
 class CollisionBlock {
   constructor({ x, y, size }) {
@@ -263,446 +193,6 @@ class CollisionBlock {
     // Optional: Draw collision blocks for debugging
     c.fillStyle = 'rgba(255, 0, 0, 0.5)'
     c.fillRect(this.x, this.y, this.width, this.height)
-  }
-}
-
-// ./classes/GameRenderer.js
-// GameRenderer.js - Handles rendering game states and UI
-class GameRenderer {
-  constructor() {
-    this.offscreenCanvas = null;
-    this.splashImage = null;
-  }
-  
-  async init() {
-    // Load splash screen background if needed
-    // this.splashImage = await loadImage('images/splashBackground.png');
-  }
-  
-  draw(context, state) {
-    switch (state) {
-      case gameStateManager.states.INTRO:
-        this.drawIntroScreen(context);
-        break;
-        
-      case gameStateManager.states.PLAYING:
-        // Main gameplay rendering happens in game loop
-        break;
-        
-      case gameStateManager.states.PAUSED:
-        this.drawPausedScreen(context);
-        break;
-        
-      case gameStateManager.states.LEVEL_COMPLETE:
-        this.drawLevelCompleteScreen(context);
-        break;
-        
-      case gameStateManager.states.GAME_OVER:
-        this.drawGameOverScreen(context);
-        break;
-    }
-  }
-  
-  drawIntroScreen(context) {
-    // Save current state
-    context.save();
-    
-    // Clear and scale for device pixel ratio
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    // Fill black background
-    context.fillStyle = '#000000';
-    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-    
-    // Draw title text
-    context.fillStyle = '#FFFDD0'; // Cream color
-    context.font = '48px monospace';
-    context.textAlign = 'center';
-    
-    // Draw title
-    context.fillText(
-      'The Leftovers',
-      canvas.width / dpr / 2,
-      canvas.height / dpr / 2
-    );
-    
-    // Draw "Press any key" text (flashing)
-    const stateTime = gameStateManager.getStateTime();
-    if (stateTime > 2 && Math.floor(stateTime * 2) % 2 === 0) {
-      context.font = '24px monospace';
-      context.fillText(
-        'Press any key to continue',
-        canvas.width / dpr / 2,
-        canvas.height / dpr / 2 + 60
-      );
-    }
-    
-    // Restore context state
-    context.restore();
-  }
-  
-  drawPausedScreen(context) {
-    // Save current state
-    context.save();
-    
-    // Set transform for UI elements
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    // Draw semi-transparent overlay
-    context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-    
-    // Draw "Paused" text
-    context.fillStyle = '#FFFDD0'; // Cream color
-    context.font = '48px monospace';
-    context.textAlign = 'center';
-    
-    context.fillText(
-      'Paused',
-      canvas.width / dpr / 2,
-      canvas.height / dpr / 2
-    );
-    
-    // Draw "Press enter to continue" text
-    context.font = '24px monospace';
-    context.fillText(
-      'Press enter to continue',
-      canvas.width / dpr / 2,
-      canvas.height / dpr / 2 + 60
-    );
-    
-    // Restore context state
-    context.restore();
-  }
-  
-  drawLevelCompleteScreen(context) {
-    // Save current state
-    context.save();
-    
-    // Clear and scale for device pixel ratio
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    // Fill black background
-    context.fillStyle = '#000000';
-    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-    
-    // Draw completion text
-    context.fillStyle = '#FFFDD0'; // Cream color
-    context.font = '48px monospace';
-    context.textAlign = 'center';
-    
-    context.fillText(
-      'Level 1 Passed',
-      canvas.width / dpr / 2,
-      canvas.height / dpr / 2
-    );
-    
-    // Restore context state
-    context.restore();
-  }
-  
-  drawGameOverScreen(context) {
-    // Save current state
-    context.save();
-    
-    // Clear and scale for device pixel ratio
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    // Fill black background
-    context.fillStyle = '#000000';
-    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-    
-    // Draw game over text
-    context.fillStyle = '#FFFDD0'; // Cream color
-    context.font = '48px monospace';
-    context.textAlign = 'center';
-    
-    context.fillText(
-      'Game Over',
-      canvas.width / dpr / 2,
-      canvas.height / dpr / 2
-    );
-    
-    // Restore context state
-    context.restore();
-  }
-}
-
-// ./classes/GameStateManager.js
-// GameStateManager.js - Handle game state transitions and logic
-class GameStateManager {
-  constructor() {
-    this.states = {
-      INTRO: 'intro',
-      PLAYING: 'playing',
-      PAUSED: 'paused',
-      LEVEL_COMPLETE: 'levelComplete',
-      GAME_OVER: 'gameOver'
-    };
-    
-    this.currentState = this.states.INTRO;
-    this.stateChangeCallbacks = {};
-    this.stateEnteredTime = 0;
-    this.lives = 3;
-    this.coins = 0;
-    this.cans = 0;
-    this.coinsCollected = new Set();
-    this.cansCollected = new Set();
-  }
-  
-  startGame() {
-    if (this.currentState === this.states.INTRO || 
-        this.currentState === this.states.PAUSED) {
-      this.changeState(this.states.PLAYING);
-    }
-  }
-  
-  init() {
-    this.reset();
-  }
-  
-  reset() {
-    this.changeState(this.states.INTRO);
-  }
-  
-  changeState(newState) {
-    const oldState = this.currentState;
-    this.currentState = newState;
-    this.stateEnteredTime = timeManager.gameTime;
-    
-    if (this.stateChangeCallbacks[newState]) {
-      this.stateChangeCallbacks[newState].forEach(callback => callback(oldState));
-    }
-    
-    switch (newState) {
-      case this.states.INTRO:
-        soundManager.stopMusic();
-        timeManager.reset();
-        this.lives = 3;
-        this.coins = 0;
-        this.cans = 0;
-        this.coinsCollected.clear();
-        this.cansCollected.clear();
-        break;
-        
-      case this.states.PLAYING:
-        timeManager.resume();
-        if (oldState === this.states.INTRO || oldState === this.states.PAUSED) {
-          soundManager.playMusic('intro');
-        }
-        break;
-        
-      case this.states.PAUSED:
-        soundManager.pauseMusic();
-        timeManager.pause();
-        break;
-        
-      case this.states.LEVEL_COMPLETE:
-        soundManager.playMusic('win');
-        timeManager.setTimeout(() => this.changeState(this.states.INTRO), 3);
-        break;
-        
-      case this.states.GAME_OVER:
-        soundManager.playMusic('gameOver');
-        timeManager.setTimeout(() => this.changeState(this.states.INTRO), 8);
-        break;
-    }
-  }
-  
-  onStateChange(state, callback) {
-    if (!this.stateChangeCallbacks[state]) {
-      this.stateChangeCallbacks[state] = [];
-    }
-    this.stateChangeCallbacks[state].push(callback);
-  }
-  
-  isState(state) {
-    return this.currentState === state;
-  }
-  
-  getStateTime() {
-    return timeManager.gameTime - this.stateEnteredTime;
-  }
-  
-  // Player stats methods
-  addCoin() {
-    this.coins++;
-    soundManager.playSound('coin');
-  }
-  
-  addCan() {
-    this.cans++;
-    this.addLife();
-    soundManager.playSound('can');
-  }
-  
-  addLife() {
-    this.lives++;
-  }
-  
-  removeLife() {
-    this.lives--;
-    soundManager.playSound('hurt');
-    
-    if (this.lives <= 0) {
-      this.changeState(this.states.GAME_OVER);
-    }
-    
-    return this.lives;
-  }
-  
-  // Check if item was already collected
-  isItemCollected(type, x, y) {
-    const key = `${x},${y}`;
-    if (type === 'coin') {
-      return this.coinsCollected.has(key);
-    } else if (type === 'can') {
-      return this.cansCollected.has(key);
-    }
-    return false;
-  }
-  
-  // Mark item as collected
-  markItemCollected(type, x, y) {
-    const key = `${x},${y}`;
-    if (type === 'coin') {
-      this.coinsCollected.add(key);
-    } else if (type === 'can') {
-      this.cansCollected.add(key);
-    }
-  }
-}
-
-// ./classes/HUD.js
-// HUD.js - Heads-up display rendering
-class HUD {
-  constructor() {
-    this.lifeIcon = null;
-    this.coinIcon = null;
-    this.canIcon = null;
-    this.timerIcon = null;
-    this.initialized = false;
-    
-    // Font settings
-    this.fontFamily = 'monospace'; // Use monospace as a pixel font alternative
-    this.fontSize = 16;
-    this.fontColor = '#FFFFFF'; // Cream color
-  }
-  
-  async init() {
-    try {
-      // Load HUD icons
-      this.lifeIcon = await loadImage('images/lifeFlag.png');
-      this.coinIcon = await loadImage('images/CoinSprite.png');
-      this.canIcon = await loadImage('images/CanSprite.png');
-      this.timerIcon = await loadImage('images/timerSprite.png');
-      
-      this.initialized = true;
-    } catch (error) {
-      console.error('Failed to load HUD icons:', error);
-    }
-  }
-  
-  draw(context) {
-    if (!this.initialized) return;
-    
-    // Save current context state
-    context.save();
-    
-    // Reset transformations to draw directly on screen
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    // Set font style
-    context.font = `${this.fontSize}px ${this.fontFamily}`;
-    context.fillStyle = this.fontColor;
-    
-    // Draw lives (top-left)
-    this.drawLives(context);
-    
-    // Draw coins and cans counter
-    this.drawCoins(context);
-    this.drawCans(context);
-    
-    // Draw timer (top-right)
-    this.drawTimer(context);
-    
-    // Restore context state
-    context.restore();
-  }
-  
-  drawLives(context) {
-    const lives = gameStateManager.lives;
-    const iconSize = 16;
-    const spacing = 8;
-    const startX = 10;
-    const startY = 10;
-    
-    for (let i = 0; i < lives; i++) {
-      context.drawImage(
-        this.lifeIcon,
-        startX + i * (iconSize + spacing),
-        startY,
-        iconSize,
-        iconSize
-      );
-    }
-  }
-  
-  drawCoins(context) {
-    const coins = gameStateManager.coins;
-    const iconSize = 16;
-    const startX = 10;
-    const startY = 36; // Below lives
-    
-    // Draw coin icon
-    context.drawImage(
-      this.coinIcon,
-      startX,
-      startY,
-      iconSize,
-      iconSize
-    );
-    
-    // Draw coin count
-    context.fillText(`x ${coins}`, startX + iconSize + 5, startY + iconSize - 2);
-  }
-  
-  drawCans(context) {
-    const cans = gameStateManager.cans;
-    const iconSize = 16;
-    const startX = 10;
-    const startY = 62; // Below coins
-    
-    // Draw can icon
-    context.drawImage(
-      this.canIcon,
-      startX,
-      startY,
-      iconSize,
-      iconSize
-    );
-    
-    // Draw can count
-    context.fillText(`x ${cans}`, startX + iconSize + 5, startY + iconSize - 2);
-  }
-  
-  drawTimer(context) {
-    const timerText = timeManager.getFormattedTime();
-    const iconSize = 16;
-    const startX = canvas.width / dpr - 110;
-    const startY = 10;
-    
-    // Draw timer icon
-    context.drawImage(
-      this.timerIcon,
-      startX,
-      startY,
-      iconSize,
-      iconSize
-    );
-    
-    // Draw timer text
-    context.fillText(timerText, startX + iconSize + 5, startY + iconSize - 2);
   }
 }
 
@@ -848,6 +338,18 @@ class Player {
         this.handleInput(keys);
       }
 
+      // Add this check to prevent landing state from persisting
+      if (this.movementState === 'landing' && this.animation.isComplete() && this.isOnGround) {
+        this.inputLocked = false;
+        if (keys.a.pressed || keys.d.pressed) {
+          this.movementState = 'running';
+          this.animation.play('running', true);
+        } else {
+          this.movementState = 'idle';
+          this.animation.play('idle', true);
+        }
+      }
+
       // Update horizontal position and check collisions
       this.x += this.velocity.x * deltaTime;
       this.checkForHorizontalCollisions(collisionBlocks);
@@ -945,29 +447,28 @@ class Player {
   }
     
   land() {
-      // Only proceed if we're actually grounded
-      if (!this.isOnGround) {
-          console.warn("Prevented landing while not grounded");
-          return;
-      }
-
-      console.log("Proper landing detected");
-      this.movementState = 'landing';
-      this.inputLocked = true;
+    // Prevent duplicate landings
+    if (this.movementState === 'landing') return;
+    
+    console.log("Triggering landing animation");
+    this.movementState = 'landing';
+    this.inputLocked = true;
+    
+    this.animation.play('landing', false, 0.1, () => {
+      console.log("Landing animation completed");
+      this.inputLocked = false;
       
-      this.animation.play('landing', false, 0.08, () => {
-          this.inputLocked = false; // Unlock controls when animation completes
-          
-          // Immediately check current input state
-          if (keys.a.pressed || keys.d.pressed) {
-              this.movementState = 'running';
-              this.animation.play('running', true);
-          } else {
-              this.movementState = 'idle';
-              this.animation.play('idle', true);
-          }
-      });
+      // Check current input to determine next state
+      if (keys.a.pressed || keys.d.pressed) {
+        this.movementState = 'running';
+        this.animation.play('running', true);
+      } else {
+        this.movementState = 'idle';
+        this.animation.play('idle', true);
+      }
+    });
   }
+  
   takeDamage() {
     // Skip if already invincible
     if (this.isInvincible) return;
@@ -1058,40 +559,44 @@ class Player {
   }
   
   updateMovementState() {
-      // Skip if in special states that handle their own transitions
-      if (this.movementState === 'death') return;
+    // Skip if in special states that handle their own transitions
+    if (this.movementState === 'death' || 
+        this.movementState === 'landing' && !this.animation.isComplete()) {
+      return;
+    }
 
-      // If we're landing, don't override the state
-      if (this.movementState === 'landing') return;
-
-      // Airborne states
-      if (!this.isOnGround) {
-          if (this.velocity.y < 0) {
-              if (this.movementState !== 'jumping') {
-                  this.movementState = 'jumping';
-                  this.animation.play('jumping', false);
-              }
-          } else {
-              if (this.movementState !== 'falling') {
-                  this.movementState = 'falling';
-                  this.animation.play('falling', true);
-              }
-          }
-          return;
-      }
-
-      // Grounded states
-      if (this.velocity.x !== 0) {
-          if (this.movementState !== 'running') {
-              this.movementState = 'running';
-              this.animation.play('running', true);
-          }
+    // Airborne states
+    if (!this.isOnGround) {
+      if (this.velocity.y < 0) {
+        if (this.movementState !== 'jumping') {
+          this.movementState = 'jumping';
+          this.animation.play('jumping', false);
+        }
       } else {
-          if (this.movementState !== 'idle') {
-              this.movementState = 'idle';
-              this.animation.play('idle', true);
-          }
+        if (this.movementState !== 'falling') {
+          this.movementState = 'falling';
+          this.animation.play('falling', true);
+        }
       }
+      return;
+    }
+
+    // Grounded states - only transition if not in landing animation
+    if (this.movementState === 'landing' && !this.animation.isComplete()) {
+      return;
+    }
+
+    if (this.velocity.x !== 0) {
+      if (this.movementState !== 'running') {
+        this.movementState = 'running';
+        this.animation.play('running', true);
+      }
+    } else {
+      if (this.movementState !== 'idle') {
+        this.movementState = 'idle';
+        this.animation.play('idle', true);
+      }
+    }
   }
 
   checkForHorizontalCollisions(collisionBlocks) {
@@ -1153,6 +658,7 @@ class Player {
   checkPlatformCollisions(platforms, deltaTime) {
     const buffer = 0.0001;
     let wasInAir = !this.isOnGround;
+    this.isOnGround = false; // Reset before checking
     
     // Only check if moving downward
     if (this.velocity.y <= 0) return;
@@ -1166,14 +672,21 @@ class Player {
 
     for (let platform of platforms) {
       if (this.isColliding(collisionBox, platform)) {
-        this.velocity.y = 0;
-        this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
-        this.isOnGround = true;
-        if (wasInAir) this.land();
-        return; // Only land on one platform
+        // More precise landing check - must be coming from above
+        if (this.y + this.height <= platform.y + platform.height && 
+            this.velocity.y > 0) {
+          this.velocity.y = 0;
+          this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
+          this.isOnGround = true;
+          
+          // Only trigger landing if we were in air and not already landing
+          if (wasInAir && this.movementState !== 'landing') {
+            this.land();
+          }
+          return;
+        }
       }
     }
-    this.isOnGround = false;
   }
 
   isColliding(rect1, rect2) {
@@ -1253,120 +766,6 @@ class Player {
         gameStateManager.changeState(gameStateManager.states.LEVEL_COMPLETE);
       }
     }
-  }
-}
-
-// ./classes/SoundManager.js
-// SoundManager.js - Handle all game sounds and music
-class SoundManager {
-  constructor() {
-    this.sounds = {};
-    this.music = {};
-    this.currentMusic = null;
-    this.musicVolume = 0.5;
-    this.soundVolume = 0.7;
-    this.initialized = false;
-  }
-
-  init() {
-    // Load all sounds and music
-    this.loadMusic('intro', 'sounds/mostlyChimesTrimmed.mp3');
-    this.loadMusic('win', 'sounds/winningTrimmed.mp3');
-    this.loadMusic('gameOver', 'sounds/flatliningTrimmed.mp3');
-    
-    // Load sound effects
-    this.loadSound('jump', 'sounds/jumping.mp3');
-    this.loadSound('coin', 'sounds/coinDropTrimmed.mp3');
-    this.loadSound('can', 'sounds/metalTrimmed.mp3');
-    this.loadSound('hurt', 'sounds/landingTrimmed.mp3');
-    
-    this.initialized = true;
-  }
-  
-  loadSound(name, url) {
-    const audio = new Audio(url);
-    audio.volume = this.soundVolume;
-    this.sounds[name] = audio;
-    return audio;
-  }
-  
-  loadMusic(name, url) {
-    const audio = new Audio(url);
-    audio.volume = this.musicVolume;
-    audio.loop = true;
-    this.music[name] = audio;
-    return audio;
-  }
-  
-  playSound(name) {
-    if (!this.initialized) return;
-    
-    const sound = this.sounds[name];
-    if (sound) {
-      // Clone the sound to allow multiple instances
-      const soundClone = sound.cloneNode();
-      soundClone.volume = this.soundVolume;
-      soundClone.play();
-    }
-  }
-  
-  playMusic(name) {
-    // Stop any currently playing music first
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].pause();
-    }
-
-    const music = this.music[name];
-    if (music) {
-      music.currentTime = 0;
-      music.play().catch(e => {
-        console.log("Audio play prevented:", e);
-        // Implement audio play promise handling
-        document.addEventListener('click', () => {
-          music.play().catch(e => console.log("Still prevented:", e));
-        }, { once: true });
-      });
-      this.currentMusic = name;
-    }
-  }
-
-  
-  stopMusic() {
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].pause();
-      this.music[this.currentMusic].currentTime = 0;
-    }
-    this.currentMusic = null;
-  }
-  
-  pauseMusic() {
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].pause();
-    }
-  }
-  
-  resumeMusic() {
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].play();
-    }
-  }
-  
-  setMusicVolume(volume) {
-    this.musicVolume = Math.max(0, Math.min(1, volume));
-    
-    // Update all music volumes
-    Object.values(this.music).forEach(audio => {
-      audio.volume = this.musicVolume;
-    });
-  }
-  
-  setSoundVolume(volume) {
-    this.soundVolume = Math.max(0, Math.min(1, volume));
-    
-    // Update all sound volumes
-    Object.values(this.sounds).forEach(audio => {
-      audio.volume = this.soundVolume;
-    });
   }
 }
 
@@ -1471,6 +870,92 @@ class TimeManager {
     });
   }
 }
+
+
+// ./js/evenListeners.js
+// Debug version - logs all key events
+console.log("Initializing event listeners...");
+
+window.addEventListener('keydown', (event) => {
+    // Allow any key to start game from intro
+    if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+      gameStateManager.startGame();
+      return;
+    }
+    
+    if (gameStateManager.currentState !== gameStateManager.states.PLAYING) {
+        console.log("Ignoring input - game not in PLAYING state");
+        return;
+    }
+
+    switch (event.key.toLowerCase()) {
+        case 'w':
+        case 'arrowup':
+            console.log("Jump attempted");
+            if (player.isOnGround) {
+                player.jump();
+                keys.w.pressed = true;
+            }
+            break;
+            
+        case 'a':
+        case 'arrowleft':
+            console.log("Moving LEFT");
+            keys.a.pressed = true;
+            break;
+            
+        case 'd':
+        case 'arrowright':
+            console.log("Moving RIGHT");
+            keys.d.pressed = true;
+            break;
+            
+        case 'escape':
+            console.log("Pause toggled");
+            // Pause logic remains same
+            break;
+    }
+});
+
+window.addEventListener('keyup', (event) => {
+    console.log(`Key UP: ${event.key}`);
+    
+    switch (event.key.toLowerCase()) {
+        case 'a':
+        case 'arrowleft':
+            keys.a.pressed = false;
+            break;
+            
+        case 'd':
+        case 'arrowright':
+            keys.d.pressed = false;
+            break;
+            
+        case 'w':
+        case 'arrowup':
+            keys.w.pressed = false;
+            break;
+    }
+});
+
+console.log("Event listeners initialized");
+
+// Handle tab visibility changes
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    lastTime = performance.now();
+    
+    // Resume game if it was playing when tab was hidden
+    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+      timeManager.resume();
+    }
+  } else {
+    // Pause game when tab is hidden
+    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+      timeManager.pause();
+    }
+  }
+});
 
 // ./js/index.js
 // Get canvas and context
@@ -1618,7 +1103,7 @@ const player = new Player({
   x: 100,
   y: 100,
   size: 32, // Make sure this matches your sprite size
-  velocity: { x: 0, y: 0 } // Explicitly provide velocity
+  velocity: { x: 0, y: 0 }
 });
 
 const keys = {
@@ -1628,9 +1113,9 @@ const keys = {
 }
 
 // MODIFIED GAME LOOP
-function animate(backgroundCanvas) {
+async function animate(backgroundCanvas) {
     const currentTime = performance.now();
-    const deltaTime = (currentTime - lastTime) / 1000;
+    const deltaTime = (currentTime - lastTime) / 1000; // Now properly defined
     lastTime = currentTime;
     
     // Debug log - show game state and player info
@@ -1731,6 +1216,7 @@ const startGame = async () => {
 startGame();
 
 // ./index.html
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -1804,3 +1290,4 @@ startGame();
     <script src="./js/index.js"></script>
 </body>
 </html>
+

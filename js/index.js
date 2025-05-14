@@ -209,7 +209,8 @@ const startGame = async () => {
     await Promise.all([
       hud.init(),
       soundManager.init(),
-      gameStateManager.init()
+      gameStateManager.init(),
+      player.init() // Make sure to initialize player animations
     ]);
     
     console.log('Loading map...');

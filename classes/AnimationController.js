@@ -1,4 +1,3 @@
-// AnimationController.js - Handles sprite animations for the player
 class AnimationController {
   constructor() {
     this.animations = {};
@@ -64,29 +63,27 @@ class AnimationController {
     });
   }
   
-  // Modify the play() method to ensure callbacks fire:
   play(animationName, loop = true, frameRate = 0.1, callback = null) {
-    if (!this.animations[animationName]) return;
+    if (!this.animations[animationName]) {
+      console.error(`Animation not found: ${animationName}`);
+      return;
+    }
     
-    // Always restart animation if it's not looping
+    // Only change animation if it's different or we're forcing a restart
     if (this.currentAnimation !== animationName || !loop) {
+      console.log(`Playing animation: ${animationName}, loop: ${loop}`);
       this.currentAnimation = animationName;
       this.currentFrame = 0;
       this.frameTimer = 0;
       this.isPlaying = true;
       this.isLooping = loop;
       this.frameDuration = frameRate;
-      this.onAnimationComplete = callback || function() {};
+      
+      // Store callback
+      this.onAnimationComplete = callback || null;
     }
   }
 
-  isComplete() {
-    if (!this.currentAnimation || !this.animations[this.currentAnimation]) return false;
-    const animation = this.animations[this.currentAnimation];
-    return !this.isLooping && this.currentFrame >= animation.frameCount - 1;
-  }
-
-  // And modify the update() method:
   update(deltaTime) {
     if (!this.isPlaying || !this.currentAnimation) return;
     
@@ -96,24 +93,24 @@ class AnimationController {
       this.frameTimer = 0;
       this.currentFrame++;
       
+      const animation = this.animations[this.currentAnimation];
+      if (!animation) return;
+      
       // Animation complete handling
-      if (this.currentFrame >= this.animations[this.currentAnimation].frameCount) {
-        const shouldLoop = this.isLooping;
-        const callback = this.onAnimationComplete;
-        
-        if (shouldLoop) {
+      if (this.currentFrame >= animation.frameCount) {
+        if (this.isLooping) {
           this.currentFrame = 0;
         } else {
-          this.currentFrame = this.animations[this.currentAnimation].frameCount - 1;
+          this.currentFrame = animation.frameCount - 1;
           this.isPlaying = false;
-        }
-        
-        // Execute callback after state is updated
-        if (callback && !shouldLoop) {
-          requestAnimationFrame(() => {
+          
+          // Execute callback if exists
+          if (this.onAnimationComplete) {
+            const callback = this.onAnimationComplete;
+            // Clear before firing to prevent potential loops
+            this.onAnimationComplete = null;
             callback();
-            this.onAnimationComplete = null; // Clear after firing
-          });
+          }
         }
       }
     }
@@ -157,6 +154,9 @@ class AnimationController {
   
   // Check if an animation has completed (for non-looping animations)
   isComplete() {
+    if (!this.currentAnimation || !this.animations[this.currentAnimation]) return false;
+    
+    // Only non-looping animations can be "complete"
     if (this.isLooping) return false;
     
     const animation = this.animations[this.currentAnimation];
@@ -172,7 +172,9 @@ class AnimationController {
     this.isPlaying = false;
     
     if (this.onAnimationComplete) {
-      this.onAnimationComplete();
+      const callback = this.onAnimationComplete;
+      this.onAnimationComplete = null;
+      callback();
     }
   }
 }
