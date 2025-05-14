@@ -15,12 +15,11 @@ class AnimationController {
   }
   
   async init() {
-    // Load all player animations
+    // Load all player animations - Removed landing animation
     await this.loadAnimation('idle', 'images/idle.png', 1, 32, 32);
     await this.loadAnimation('running', 'images/running.png', 8, 32, 32);
     await this.loadAnimation('jumping', 'images/jumping.png', 3, 40, 40);
     await this.loadAnimation('falling', 'images/falling.png', 1, 40, 40);
-    await this.loadAnimation('landing', 'images/landing.png', 5, 40, 40); // 5 frames, 40x40px
     await this.loadAnimation('death', 'images/death.png', 1, 32, 32);
     
     this.initialized = true;
@@ -84,6 +83,7 @@ class AnimationController {
     }
   }
 
+
   update(deltaTime) {
     if (!this.isPlaying || !this.currentAnimation) return;
     
@@ -116,6 +116,7 @@ class AnimationController {
     }
   }
     
+    
   draw(context, x, y) {
     if (!this.initialized || !this.currentAnimation) return;
     
@@ -145,7 +146,8 @@ class AnimationController {
     
     context.restore();
   }
-  
+
+
   // Set the horizontal flip state based on direction
   setDirection(direction) {
     // direction: 1 for right, -1 for left

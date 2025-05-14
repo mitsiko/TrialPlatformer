@@ -1,5 +1,4 @@
 // ./classes/AnimationController.js
-// AnimationController.js - Handles sprite animations for the player
 class AnimationController {
   constructor() {
     this.animations = {};
@@ -17,12 +16,11 @@ class AnimationController {
   }
   
   async init() {
-    // Load all player animations
+    // Load all player animations - Removed landing animation
     await this.loadAnimation('idle', 'images/idle.png', 1, 32, 32);
     await this.loadAnimation('running', 'images/running.png', 8, 32, 32);
     await this.loadAnimation('jumping', 'images/jumping.png', 3, 40, 40);
     await this.loadAnimation('falling', 'images/falling.png', 1, 40, 40);
-    await this.loadAnimation('landing', 'images/landing.png', 5, 40, 40); // 5 frames, 40x40px
     await this.loadAnimation('death', 'images/death.png', 1, 32, 32);
     
     this.initialized = true;
@@ -65,29 +63,28 @@ class AnimationController {
     });
   }
   
-  // Modify the play() method to ensure callbacks fire:
   play(animationName, loop = true, frameRate = 0.1, callback = null) {
-    if (!this.animations[animationName]) return;
+    if (!this.animations[animationName]) {
+      console.error(`Animation not found: ${animationName}`);
+      return;
+    }
     
-    // Always restart animation if it's not looping
+    // Only change animation if it's different or we're forcing a restart
     if (this.currentAnimation !== animationName || !loop) {
+      console.log(`Playing animation: ${animationName}, loop: ${loop}`);
       this.currentAnimation = animationName;
       this.currentFrame = 0;
       this.frameTimer = 0;
       this.isPlaying = true;
       this.isLooping = loop;
       this.frameDuration = frameRate;
-      this.onAnimationComplete = callback || function() {};
+      
+      // Store callback
+      this.onAnimationComplete = callback || null;
     }
   }
 
-  isComplete() {
-    if (!this.currentAnimation || !this.animations[this.currentAnimation]) return false;
-    const animation = this.animations[this.currentAnimation];
-    return !this.isLooping && this.currentFrame >= animation.frameCount - 1;
-  }
 
-  // And modify the update() method:
   update(deltaTime) {
     if (!this.isPlaying || !this.currentAnimation) return;
     
@@ -97,28 +94,29 @@ class AnimationController {
       this.frameTimer = 0;
       this.currentFrame++;
       
+      const animation = this.animations[this.currentAnimation];
+      if (!animation) return;
+      
       // Animation complete handling
-      if (this.currentFrame >= this.animations[this.currentAnimation].frameCount) {
-        const shouldLoop = this.isLooping;
-        const callback = this.onAnimationComplete;
-        
-        if (shouldLoop) {
+      if (this.currentFrame >= animation.frameCount) {
+        if (this.isLooping) {
           this.currentFrame = 0;
         } else {
-          this.currentFrame = this.animations[this.currentAnimation].frameCount - 1;
+          this.currentFrame = animation.frameCount - 1;
           this.isPlaying = false;
-        }
-        
-        // Execute callback after state is updated
-        if (callback && !shouldLoop) {
-          requestAnimationFrame(() => {
+          
+          // Execute callback if exists
+          if (this.onAnimationComplete) {
+            const callback = this.onAnimationComplete;
+            // Clear before firing to prevent potential loops
+            this.onAnimationComplete = null;
             callback();
-            this.onAnimationComplete = null; // Clear after firing
-          });
+          }
         }
       }
     }
   }
+    
     
   draw(context, x, y) {
     if (!this.initialized || !this.currentAnimation) return;
@@ -149,7 +147,8 @@ class AnimationController {
     
     context.restore();
   }
-  
+
+
   // Set the horizontal flip state based on direction
   setDirection(direction) {
     // direction: 1 for right, -1 for left
@@ -158,6 +157,9 @@ class AnimationController {
   
   // Check if an animation has completed (for non-looping animations)
   isComplete() {
+    if (!this.currentAnimation || !this.animations[this.currentAnimation]) return false;
+    
+    // Only non-looping animations can be "complete"
     if (this.isLooping) return false;
     
     const animation = this.animations[this.currentAnimation];
@@ -173,12 +175,12 @@ class AnimationController {
     this.isPlaying = false;
     
     if (this.onAnimationComplete) {
-      this.onAnimationComplete();
+      const callback = this.onAnimationComplete;
+      this.onAnimationComplete = null;
+      callback();
     }
   }
 }
-
-
 
 // ./classes/CollisionBlock.js
 class CollisionBlock {
@@ -231,22 +233,21 @@ const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
 
 class Player {
-    constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
-    this.x = x
-    this.y = y
-    this.width = size
-    this.height = size  
-    this.velocity = velocity; // Now properly initialized
+  constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
+    this.x = x;
+    this.y = y;
+    this.width = size;
+    this.height = size;  
+    this.velocity = { x: 0, y: 0 }; // Properly initialize velocity object
     this.isOnGround = false;
-
     
     this.direction = 1; // 1 for right, -1 for left
     
     // Movement state
-    this.movementState = 'idle'; // idle, running, jumping, falling, landing, death
+    this.movementState = 'idle'; // idle, running, jumping, falling, death
     this.canJump = true;
     this.canMove = true;
-    this.inputLocked = false;  // For hop and landing animations
+    this.inputLocked = false;  // For hop animations
     
     // Fall damage tracking
     this.fallStartY = 0;
@@ -261,10 +262,6 @@ class Player {
     // Create animation controller
     this.animation = new AnimationController();
     
-    // Initialize animation states
-    this.animation.init();
-  
-
     // Updated collision properties
     this.collisionOffset = {
       x: size * 0.15,  // 15% from left
@@ -274,8 +271,19 @@ class Player {
       width: size * 0.7,
       height: size * 0.9  // 90% of player height
     };
+    
+    console.log("Player initialized");
   }
 
+  async init() {
+    // Initialize animation states
+    await this.animation.init();
+    console.log("Player animations initialized");
+    
+    // Make sure we start with the idle animation
+    this.movementState = 'idle';
+    this.animation.play('idle', true);
+  }
 
   draw(c) {
     if (this.isInvincible && !this.isVisible) return;
@@ -325,7 +333,7 @@ class Player {
     // Apply gravity if not grounded
     if (!this.isOnGround) {
       this.applyGravity(deltaTime);
-      if (this.velocity.y > 500) this.velocity.y = 500;
+      if (this.velocity.y > 500) this.velocity.y = 500; // Terminal velocity
     }
 
     // Only process movement if not in death state
@@ -336,18 +344,6 @@ class Player {
       // Handle input if not locked
       if (!this.inputLocked) {
         this.handleInput(keys);
-      }
-
-      // Add this check to prevent landing state from persisting
-      if (this.movementState === 'landing' && this.animation.isComplete() && this.isOnGround) {
-        this.inputLocked = false;
-        if (keys.a.pressed || keys.d.pressed) {
-          this.movementState = 'running';
-          this.animation.play('running', true);
-        } else {
-          this.movementState = 'idle';
-          this.animation.play('idle', true);
-        }
       }
 
       // Update horizontal position and check collisions
@@ -370,6 +366,8 @@ class Player {
       this.updateMovementState();
     }
   }
+
+
   updateInvincibility(deltaTime) {
     if (this.isInvincible) {
       this.invincibilityTimer += deltaTime;
@@ -389,6 +387,7 @@ class Player {
     }
   }
   
+  
   updateFallTracking() {
     // Start tracking fall if moving downward and not on ground
     if (this.velocity.y > 0 && !this.isOnGround && !this.isFalling) {
@@ -406,16 +405,14 @@ class Player {
       }
       
       this.isFalling = false;
-      
-      // Trigger landing animation if falling (not from a jump)
-      if (this.movementState === 'falling') {
-        this.land();
-      }
     }
   }
 
+
   jump() {
     if (this.isOnGround && this.canJump && !this.inputLocked) {
+      console.log("Jump executed");
+      
       this.velocity.y = -JUMP_POWER;
       this.isOnGround = false;
       this.canJump = false;
@@ -424,15 +421,20 @@ class Player {
       // Play jump animation (non-looping)
       this.animation.play('jumping', false, 0.1, () => {
         // When jump animation completes, transition to falling
+        this.movementState = 'falling';
         this.animation.play('falling', true);
       });
       
-      soundManager.playSound('jump');
+      // Could play jump sound here if available
+      // soundManager.playSound('jump');
     }
   }
   
+  
   verticalHop() {
     if (this.isOnGround && this.canJump && !this.inputLocked) {
+      console.log("Vertical hop executed");
+      
       this.velocity.y = -VERTICAL_HOP_POWER;
       this.isOnGround = false;
       this.canJump = false;
@@ -442,46 +444,22 @@ class Player {
       // Play falling animation for the hop
       this.animation.play('falling', true);
       
-      soundManager.playSound('jump');
+      // Could play jump sound here
+      // soundManager.playSound('jump');
     }
-  }
-    
-  land() {
-    // Prevent duplicate landings
-    if (this.movementState === 'landing') return;
-    
-    console.log("Triggering landing animation");
-    this.movementState = 'landing';
-    this.inputLocked = true;
-    
-    this.animation.play('landing', false, 0.1, () => {
-      console.log("Landing animation completed");
-      this.inputLocked = false;
-      
-      // Check current input to determine next state
-      if (keys.a.pressed || keys.d.pressed) {
-        this.movementState = 'running';
-        this.animation.play('running', true);
-      } else {
-        this.movementState = 'idle';
-        this.animation.play('idle', true);
-      }
-    });
   }
   
   takeDamage() {
     // Skip if already invincible
     if (this.isInvincible) return;
     
-    // Remove a life
-    gameStateManager.removeLife();
-    
-    // Start invincibility
-    this.isInvincible = true;
-    this.invincibilityTimer = 0;
+    // Remove a life if GameStateManager exists
+    if (typeof gameStateManager !== 'undefined') {
+      gameStateManager.removeLife();
+    }
     
     // If player is still alive, make them invincible temporarily
-    if (gameStateManager.lives > 0) {
+    if (typeof gameStateManager !== 'undefined' && gameStateManager.lives > 0) {
       this.isInvincible = true;
       this.invincibilityTimer = 0;
     } else {
@@ -499,17 +477,11 @@ class Player {
     this.animation.play('death', true);
     
     // Transition to game over state after a delay
-    timeManager.setTimeout(() => {
-      gameStateManager.changeState(gameStateManager.states.GAME_OVER);
-    }, 3);
-  }
-
-  updateHorizontalPosition(deltaTime) {
-    this.x += this.velocity.x * deltaTime;
-  }
-
-  updateVerticalPosition(deltaTime) {
-    this.y += this.velocity.y * deltaTime;
+    if (typeof timeManager !== 'undefined' && typeof gameStateManager !== 'undefined') {
+      timeManager.setTimeout(() => {
+        gameStateManager.changeState(gameStateManager.states.GAME_OVER);
+      }, 3);
+    }
   }
 
   applyGravity(deltaTime) {
@@ -517,62 +489,73 @@ class Player {
   }
 
   handleInput(keys) {
-      console.log("Handling input - Current keys state:", keys);
-      
-      if (this.inputLocked) {
-          console.log("Input locked - ignoring");
-          return;
-      }
+    if (!keys) return;
+    
+    console.log("Handling input - Current keys state:", keys);
+    
+    if (this.inputLocked) {
+      console.log("Input locked - ignoring");
+      return;
+    }
 
-      // Reset horizontal velocity
-      this.velocity.x = 0;
+    // Reset horizontal velocity
+    this.velocity.x = 0;
 
-      if (keys.a.pressed) {
-          console.log("Applying LEFT movement");
-          this.velocity.x = -X_VELOCITY;
-          this.direction = -1;
-          this.animation.setDirection(-1);
-          
-          // Immediately update state if grounded
-          if (this.isOnGround && this.movementState !== 'running') {
-              this.movementState = 'running';
-              this.animation.play('running', true);
-          }
-      } else if (keys.d.pressed) {
-          console.log("Applying RIGHT movement");
-          this.velocity.x = X_VELOCITY;
-          this.direction = 1;
-          this.animation.setDirection(1);
-          
-          // Immediately update state if grounded
-          if (this.isOnGround && this.movementState !== 'running') {
-              this.movementState = 'running';
-              this.animation.play('running', true);
-          }
-      } else if (this.isOnGround && this.movementState !== 'idle') {
-          // If no movement keys pressed and grounded
-          this.movementState = 'idle';
-          this.animation.play('idle', true);
-      }
+    if (keys.a.pressed) {
+      console.log("Applying LEFT movement");
+      this.velocity.x = -X_VELOCITY;
+      this.direction = -1;
+      this.animation.setDirection(-1);
       
-      console.log("Final velocity:", this.velocity);
+      // Immediately update state if grounded
+      if (this.isOnGround && this.movementState !== 'running') {
+        this.movementState = 'running';
+        this.animation.play('running', true);
+      }
+    } else if (keys.d.pressed) {
+      console.log("Applying RIGHT movement");
+      this.velocity.x = X_VELOCITY;
+      this.direction = 1;
+      this.animation.setDirection(1);
+      
+      // Immediately update state if grounded
+      if (this.isOnGround && this.movementState !== 'running') {
+        this.movementState = 'running';
+        this.animation.play('running', true);
+      }
+    } else if (this.isOnGround && this.movementState !== 'idle') {
+      // If no movement keys pressed and grounded
+      this.movementState = 'idle';
+      this.animation.play('idle', true);
+    }
+    
+    console.log("Final velocity:", this.velocity, "Movement state:", this.movementState);
   }
-  
+
+
   updateMovementState() {
-    // Skip if in special states that handle their own transitions
-    if (this.movementState === 'death' || 
-        this.movementState === 'landing' && !this.animation.isComplete()) {
+    // Skip if in death state
+    if (this.movementState === 'death') {
       return;
     }
 
     // Airborne states
     if (!this.isOnGround) {
       if (this.velocity.y < 0) {
+        // Only change to jumping if not already in that state
         if (this.movementState !== 'jumping') {
           this.movementState = 'jumping';
-          this.animation.play('jumping', false);
+          if (this.animation.currentAnimation !== 'jumping') {
+            this.animation.play('jumping', false, 0.1, () => {
+              if (this.velocity.y > 0) {
+                this.movementState = 'falling';
+                this.animation.play('falling', true);
+              }
+            });
+          }
         }
       } else {
+        // Only change to falling if not already in that state
         if (this.movementState !== 'falling') {
           this.movementState = 'falling';
           this.animation.play('falling', true);
@@ -581,20 +564,23 @@ class Player {
       return;
     }
 
-    // Grounded states - only transition if not in landing animation
-    if (this.movementState === 'landing' && !this.animation.isComplete()) {
-      return;
-    }
-
-    if (this.velocity.x !== 0) {
-      if (this.movementState !== 'running') {
-        this.movementState = 'running';
-        this.animation.play('running', true);
+    // Grounded states
+    if (this.isOnGround) {
+      // Unlock input when grounded
+      if (this.inputLocked && this.movementState !== 'death') {
+        this.inputLocked = false;
       }
-    } else {
-      if (this.movementState !== 'idle') {
-        this.movementState = 'idle';
-        this.animation.play('idle', true);
+      
+      if (this.velocity.x !== 0) {
+        if (this.movementState !== 'running') {
+          this.movementState = 'running';
+          this.animation.play('running', true);
+        }
+      } else {
+        if (this.movementState !== 'idle') {
+          this.movementState = 'idle';
+          this.animation.play('idle', true);
+        }
       }
     }
   }
@@ -613,10 +599,12 @@ class Player {
         // Left collision
         if (this.velocity.x < 0) {
           this.x = block.x + block.width - this.collisionOffset.x + buffer;
+          this.velocity.x = 0;
         }
         // Right collision
         else if (this.velocity.x > 0) {
           this.x = block.x - this.collisionSize.width - this.collisionOffset.x - buffer;
+          this.velocity.x = 0;
         }
         break;
       }
@@ -648,7 +636,7 @@ class Player {
           this.velocity.y = 0;
           this.y = block.y - this.collisionSize.height - this.collisionOffset.y - buffer;
           this.isOnGround = true;
-          if (wasInAir) this.land();
+          this.canJump = true; // Reset ability to jump
           break;
         }
       }
@@ -657,8 +645,6 @@ class Player {
 
   checkPlatformCollisions(platforms, deltaTime) {
     const buffer = 0.0001;
-    let wasInAir = !this.isOnGround;
-    this.isOnGround = false; // Reset before checking
     
     // Only check if moving downward
     if (this.velocity.y <= 0) return;
@@ -671,23 +657,17 @@ class Player {
     };
 
     for (let platform of platforms) {
-      if (this.isColliding(collisionBox, platform)) {
-        // More precise landing check - must be coming from above
-        if (this.y + this.height <= platform.y + platform.height && 
-            this.velocity.y > 0) {
-          this.velocity.y = 0;
-          this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
-          this.isOnGround = true;
-          
-          // Only trigger landing if we were in air and not already landing
-          if (wasInAir && this.movementState !== 'landing') {
-            this.land();
-          }
-          return;
-        }
+      // Use platform's own collision check function
+      if (platform.checkCollision(this, deltaTime)) {
+        this.velocity.y = 0;
+        this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
+        this.isOnGround = true;
+        this.canJump = true; // Reset ability to jump
+        return;
       }
     }
   }
+
 
   isColliding(rect1, rect2) {
     return (
@@ -697,8 +677,9 @@ class Player {
       rect1.y + rect1.height > rect2.y
     );
   }
+
   
-  // In Player.js, modify checkItemCollisions:
+  // Check item collisions
   checkItemCollisions(itemLayer, itemType) {
     const tileSize = 16;
     // Check multiple points for better collision detection
@@ -769,121 +750,18 @@ class Player {
   }
 }
 
-
-// ./classes/TimeManager.js
-// TimeManager.js - A centralized timing system for the game
-class TimeManager {
-  constructor() {
-    this.deltaTime = 0;
-    this.lastTime = performance.now();
-    this.gameTime = 0; // Total elapsed game time in seconds
-    this.isPaused = false;
-    this.callbacks = {}; // For timed events
-    this.callbackId = 0;
-    
-    // Timer for level countdown
-    this.levelTime = 180; // 3 minutes in seconds
-    this.remainingTime = this.levelTime;
-  }
-
-  update() {
-    if (this.isPaused) return;
-    
-    const currentTime = performance.now();
-    this.deltaTime = (currentTime - this.lastTime) / 1000; // Convert to seconds
-    
-    // Clamp deltaTime to prevent huge jumps if browser tab was inactive
-    if (this.deltaTime > 0.1) this.deltaTime = 0.1;
-    
-    this.lastTime = currentTime;
-    this.gameTime += this.deltaTime;
-    
-    // Update level timer
-    this.remainingTime = Math.max(0, this.levelTime - this.gameTime);
-    
-    // Process callbacks
-    this._processCallbacks();
-  }
-  
-  // Get formatted time as MM:SS
-  getFormattedTime() {
-    const minutes = Math.floor(this.remainingTime / 60);
-    const seconds = Math.floor(this.remainingTime % 60);
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  }
-  
-  pause() {
-    this.isPaused = true;
-  }
-  
-  resume() {
-    this.isPaused = false;
-    this.lastTime = performance.now(); // Reset lastTime to prevent big jumps
-  }
-  
-  reset() {
-    this.gameTime = 0;
-    this.remainingTime = this.levelTime;
-    this.lastTime = performance.now();
-  }
-  
-  // Add a callback to be executed after a delay
-  setTimeout(callback, delay) {
-    const id = this.callbackId++;
-    this.callbacks[id] = {
-      callback,
-      triggerTime: this.gameTime + delay,
-      repeat: false
-    };
-    return id;
-  }
-  
-  // Add a callback to be executed repeatedly
-  setInterval(callback, interval) {
-    const id = this.callbackId++;
-    this.callbacks[id] = {
-      callback,
-      triggerTime: this.gameTime + interval,
-      interval,
-      repeat: true
-    };
-    return id;
-  }
-  
-  // Remove a callback
-  clearTimeout(id) {
-    delete this.callbacks[id];
-  }
-  
-  _processCallbacks() {
-    Object.keys(this.callbacks).forEach(id => {
-      const callback = this.callbacks[id];
-      if (this.gameTime >= callback.triggerTime) {
-        callback.callback();
-        
-        if (callback.repeat) {
-          callback.triggerTime = this.gameTime + callback.interval;
-        } else {
-          delete this.callbacks[id];
-        }
-      }
-    });
-  }
-}
-
-
-// ./js/evenListeners.js
-// Debug version - logs all key events
+// ./js/eventListeners.js
+// ./js/eventListeners.js
 console.log("Initializing event listeners...");
 
 window.addEventListener('keydown', (event) => {
     // Allow any key to start game from intro
-    if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+    if (gameStateManager && gameStateManager.currentState === gameStateManager.states.INTRO) {
       gameStateManager.startGame();
       return;
     }
     
-    if (gameStateManager.currentState !== gameStateManager.states.PLAYING) {
+    if (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING) {
         console.log("Ignoring input - game not in PLAYING state");
         return;
     }
@@ -891,9 +769,17 @@ window.addEventListener('keydown', (event) => {
     switch (event.key.toLowerCase()) {
         case 'w':
         case 'arrowup':
-            console.log("Jump attempted");
-            if (player.isOnGround) {
-                player.jump();
+            console.log("Jump key pressed");
+            // Only process jump if not already jumping
+            if (!keys.w.pressed) {
+                // Handle jumping logic here
+                if (keys.a.pressed || keys.d.pressed) {
+                    // Directional jump
+                    player.jump();
+                } else {
+                    // Vertical hop
+                    player.verticalHop();
+                }
                 keys.w.pressed = true;
             }
             break;
@@ -912,7 +798,19 @@ window.addEventListener('keydown', (event) => {
             
         case 'escape':
             console.log("Pause toggled");
-            // Pause logic remains same
+            // Toggle between playing and paused states
+            if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+                gameStateManager.changeState(gameStateManager.states.PAUSED);
+            } else if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
+                gameStateManager.changeState(gameStateManager.states.PLAYING);
+            }
+            break;
+            
+        case 'enter':
+            // Resume game if paused
+            if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
+                gameStateManager.changeState(gameStateManager.states.PLAYING);
+            }
             break;
     }
 });
@@ -957,266 +855,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// ./js/index.js
-// Get canvas and context
-const canvas = document.getElementById('gameCanvas');
-const c = canvas.getContext('2d');
-const dpr = window.devicePixelRatio || 1;
-
-// Set canvas size
-canvas.width = 1024 * dpr;
-canvas.height = 576 * dpr;
-
-// Initialize core systems
-const timeManager = new TimeManager();
-const soundManager = new SoundManager();
-const gameStateManager = new GameStateManager();
-
-// Add this right after: const gameStateManager = new GameStateManager();
-gameStateManager.onStateChange(gameStateManager.states.PLAYING, () => {
-  timeManager.resume();
-});
-
-gameStateManager.onStateChange(gameStateManager.states.PAUSED, () => {
-  timeManager.pause();
-});
-
-const cameraController = new CameraController(canvas, dpr); // Updated initialization
-const hud = new HUD();
-const gameRenderer = new GameRenderer();
-
-// Add state change listeners
-gameStateManager.onStateChange(gameStateManager.states.PLAYING, () => {
-    timeManager.resume();
-    soundManager.resumeMusic();
-});
-
-gameStateManager.onStateChange(gameStateManager.states.PAUSED, () => {
-    timeManager.pause();
-    soundManager.pauseMusic();
-});
-
-// Initialize your map data (keep this part exactly as is)
-const layersData = {
-   l_BackgroundColor: l_BackgroundColor,
-   l_Pines1: l_Pines1,
-   l_Pines2: l_Pines2,
-   l_Pines3: l_Pines3,
-   l_Pines4: l_Pines4,
-   l_Platforms1: l_Platforms1,
-   l_Platfroms2: l_Platfroms2,
-   l_Spikes: l_Spikes,
-   l_Collisions: l_Collisions,
-   l_Grass: l_Grass,
-   l_Coins: l_Coins,
-   l_Cans: l_Cans,
-};
-
-const tilesets = {
-  l_BackgroundColor: { imageUrl: './images/1a0f394a-828c-42e4-4be3-d9ff5e745800.png', tileSize: 16 },
-  l_Pines1: { imageUrl: './images/d59a674b-f898-4ffa-931e-b06142e92300.png', tileSize: 16 },
-  l_Pines2: { imageUrl: './images/d59a674b-f898-4ffa-931e-b06142e92300.png', tileSize: 16 },
-  l_Pines3: { imageUrl: './images/d59a674b-f898-4ffa-931e-b06142e92300.png', tileSize: 16 },
-  l_Pines4: { imageUrl: './images/d59a674b-f898-4ffa-931e-b06142e92300.png', tileSize: 16 },
-  l_Platforms1: { imageUrl: './images/1a0f394a-828c-42e4-4be3-d9ff5e745800.png', tileSize: 16 },
-  l_Platfroms2: { imageUrl: './images/1a0f394a-828c-42e4-4be3-d9ff5e745800.png', tileSize: 16 },
-  l_Spikes: { imageUrl: './images/1a0f394a-828c-42e4-4be3-d9ff5e745800.png', tileSize: 16 },
-  l_Collisions: { imageUrl: './images/1a0f394a-828c-42e4-4be3-d9ff5e745800.png', tileSize: 16 },
-  l_Grass: { imageUrl: './images/1a0f394a-828c-42e4-4be3-d9ff5e745800.png', tileSize: 16 },
-  l_Coins: { imageUrl: './images/CoinSprite.png', tileSize: 16 },
-  l_Cans: { imageUrl: './images/CanSprite.png', tileSize: 16 },
-};
-
-// Tile setup (keep this exactly as is)
-const collisionBlocks = []
-const platforms = []
-const blockSize = 16
-
-let lastTime = performance.now();
-
-
-collisions.forEach((row, y) => {
-  row.forEach((symbol, x) => {
-    if (symbol === 1) {
-      collisionBlocks.push(
-        new CollisionBlock({
-          x: x * blockSize,
-          y: y * blockSize,
-          size: blockSize,
-        }),
-      )
-    } else if (symbol === 2) {
-      platforms.push(
-        new Platform({
-          x: x * blockSize,
-          y: y * blockSize + blockSize,
-          width: 16,
-          height: 4,
-        }),
-      )
-    }
-  })
-})
-
-const renderLayer = (tilesData, tilesetImage, tileSize, context) => {
-  const tilesPerRow = Math.ceil(tilesetImage.width / tileSize)
-  tilesData.forEach((row, y) => {
-    row.forEach((symbol, x) => {
-      if (symbol !== 0) {
-        const tileIndex = symbol - 1
-        const srcX = (tileIndex % tilesPerRow) * tileSize
-        const srcY = Math.floor(tileIndex / tilesPerRow) * tileSize
-        context.drawImage(
-          tilesetImage,
-          srcX, srcY,
-          tileSize, tileSize,
-          x * 16, y * 16,
-          16, 16
-        )
-      }
-    })
-  })
-}
-
-const renderStaticLayers = async () => {
-  const offscreenCanvas = document.createElement('canvas')
-  offscreenCanvas.width = canvas.width
-  offscreenCanvas.height = canvas.height
-  const offscreenContext = offscreenCanvas.getContext('2d')
-
-  for (const [layerName, tilesData] of Object.entries(layersData)) {
-    const tilesetInfo = tilesets[layerName]
-    if (tilesetInfo) {
-      try {
-        const tilesetImage = await loadImage(tilesetInfo.imageUrl)
-        renderLayer(tilesData, tilesetImage, tilesetInfo.tileSize, offscreenContext)
-      } catch (error) {
-        console.error(`Failed to load image for layer ${layerName}:`, error)
-      }
-    }
-  }
-  return offscreenCanvas
-}
-
-// Initialize player (keep your existing initialization)
-const player = new Player({
-  x: 100,
-  y: 100,
-  size: 32, // Make sure this matches your sprite size
-  velocity: { x: 0, y: 0 }
-});
-
-const keys = {
-  w: { pressed: false },
-  a: { pressed: false },
-  d: { pressed: false }
-}
-
-// MODIFIED GAME LOOP
-async function animate(backgroundCanvas) {
-    const currentTime = performance.now();
-    const deltaTime = (currentTime - lastTime) / 1000; // Now properly defined
-    lastTime = currentTime;
-    
-    // Debug log - show game state and player info
-    console.log(`Frame - State: ${gameStateManager.currentState} | ` +
-              `Player: [X:${player.x.toFixed(1)}, Y:${player.y.toFixed(1)}] | ` +
-              `Velocity: [X:${player.velocity.x.toFixed(1)}, Y:${player.velocity.y.toFixed(1)}]`);
-  
-    // Clear canvas
-    c.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Always update these systems regardless of game state
-    timeManager.update(deltaTime);
-    
-    // Only update gameplay elements when in PLAYING state
-    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
-        cameraController.update(player);
-        player.handleInput(keys);
-        player.update(deltaTime, collisionBlocks, platforms);
-
-        
-        // Check item collisions only when playing
-        player.checkItemCollisions(layersData.l_Coins, 'coin');
-        player.checkItemCollisions(layersData.l_Cans, 'can');
-    }
-
-    // Apply camera transform
-    cameraController.applyTransform(c);
-    
-    // Draw background
-    c.drawImage(backgroundCanvas, 0, 0);
-    
-    // Draw player (always draw, even when paused)
-    player.draw(c);
-    
-    // Reset transform before UI
-    cameraController.resetTransform(c);
-    
-    // Always draw HUD
-    hud.draw(c);
-
-    // Continue the game loop
-    requestAnimationFrame(() => animate(backgroundCanvas));
-}
-
-// MODIFIED START FUNCTION
-const startGame = async () => {
-  try {
-    console.log('Initializing game systems...');
-    
-    // Initialize systems (no deltaTime needed here)
-    await Promise.all([
-      hud.init(),
-      soundManager.init(),
-      gameStateManager.init()
-    ]);
-    
-    console.log('Loading map...');
-    const backgroundCanvas = await renderStaticLayers();
-    if (!backgroundCanvas) {
-      console.error('Failed to create background canvas');
-      return;
-    }
-
-    // Initialize camera with map bounds
-    const mapWidth = layersData.l_Collisions[0].length * 16;
-    const mapHeight = layersData.l_Collisions.length * 16;
-    cameraController.init(mapWidth, mapHeight);
-    
-    console.log('Starting game loop...');
-    
-    // Initialize time tracking for game loop
-    lastTime = performance.now();
-    
-    // Start game loop
-    animate(backgroundCanvas);
-    
-    // Set initial game state
-    gameStateManager.changeState(gameStateManager.states.INTRO);
-
-    document.addEventListener('keydown', (e) => {
-        if (gameStateManager.currentState === gameStateManager.states.INTRO) {
-            gameStateManager.changeState(gameStateManager.states.PLAYING);
-            soundManager.playMusic('intro');
-        }
-    });
-    
-  } catch (error) {
-    console.error('Game initialization failed:', error);
-    // Add more detailed error logging
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack
-    });
-  }
-};
-
-// Start the game
-startGame();
-
 // ./index.html
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -1290,4 +929,3 @@ startGame();
     <script src="./js/index.js"></script>
 </body>
 </html>
-

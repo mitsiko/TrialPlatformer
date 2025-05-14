@@ -1,4 +1,4 @@
-// Debug version - logs all key events
+// ./js/eventListeners.js
 console.log("Initializing event listeners...");
 
 window.addEventListener('keydown', (event) => {
@@ -17,15 +17,18 @@ window.addEventListener('keydown', (event) => {
         case 'w':
         case 'arrowup':
             console.log("Jump key pressed");
-            // Handle jumping logic here
-            if (keys.a.pressed || keys.d.pressed) {
-                // Directional jump
-                player.jump();
-            } else {
-                // Vertical hop
-                player.verticalHop();
+            // Only process jump if not already jumping
+            if (!keys.w.pressed) {
+                // Handle jumping logic here
+                if (keys.a.pressed || keys.d.pressed) {
+                    // Directional jump
+                    player.jump();
+                } else {
+                    // Vertical hop
+                    player.verticalHop();
+                }
+                keys.w.pressed = true;
             }
-            keys.w.pressed = true;
             break;
             
         case 'a':
@@ -42,7 +45,19 @@ window.addEventListener('keydown', (event) => {
             
         case 'escape':
             console.log("Pause toggled");
-            // Pause logic handled elsewhere
+            // Toggle between playing and paused states
+            if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+                gameStateManager.changeState(gameStateManager.states.PAUSED);
+            } else if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
+                gameStateManager.changeState(gameStateManager.states.PLAYING);
+            }
+            break;
+            
+        case 'enter':
+            // Resume game if paused
+            if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
+                gameStateManager.changeState(gameStateManager.states.PLAYING);
+            }
             break;
     }
 });
