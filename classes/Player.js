@@ -5,7 +5,9 @@ const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
 const GRAVITY = 900;          // Increased from 580 for snappier falls
 const SKID_DECELERATION = 20; // Add this new constant
 const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
+// At the top of Player.js
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
+const FALL_ANIMATION_HEIGHT = 2; // Multiple of player height for falling animation
 
 class Player {
   constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
@@ -20,6 +22,7 @@ class Player {
     
     // Movement state
     this.movementState = 'idle'; // idle, running, jumping, falling, death
+    this.inJump = false; // Add this line
     this.canJump = true;
     this.canMove = true;
     this.inputLocked = false;  // For hop animations
@@ -170,6 +173,7 @@ class Player {
     if (this.velocity.y > 0 && !this.isOnGround && !this.isFalling) {
       this.fallStartY = this.y;
       this.isFalling = true;
+      this.fallingFromJump = this.movementState === 'jumping'; // Track if falling from jump
     }
     
     // Check for landing after a fall
@@ -182,6 +186,7 @@ class Player {
       }
       
       this.isFalling = false;
+      this.fallingFromJump = false;
     }
   }
 
@@ -189,22 +194,23 @@ class Player {
   jump() {
     if (this.isOnGround && this.canJump && !this.inputLocked) {
       console.log("Jump executed");
-      
+      this.inJump = true; // Add this line
       this.velocity.y = -JUMP_POWER;
       this.isOnGround = false;
       this.canJump = false;
       this.movementState = 'jumping';
       
-      // Play jump animation (non-looping)
       this.animation.play('jumping', false, 0.1, () => {
-        // When jump animation completes, transition to falling
-        this.movementState = 'falling';
-        this.animation.play('falling', true);
+        this.inJump = false; // Reset when animation completes
+        if (!this.isOnGround) {
+          this.animation.currentFrame = this.animation.animations['jumping'].frameCount - 1;
+          this.animation.isPlaying = false;
+        }
       });
-      soundManager.playSound('landing');    }
+      soundManager.playSound('landing');
+    }
   }
-  
-  
+    
   verticalHop() {
     if (this.isOnGround && this.canJump && !this.inputLocked) {
       console.log("Vertical hop executed");
@@ -318,14 +324,27 @@ class Player {
     // Airborne states
     if (!this.isOnGround) {
       if (this.velocity.y < 0) {
-        this.setAnimationState('jumping', false);
+        // Going up - use jumping animation
+        if (this.movementState !== 'jumping') {
+          this.setAnimationState('jumping', false);
+        }
       } else {
-        this.setAnimationState('falling', true);
+        // Going down - check fall distance
+        const fallDistance = this.y - this.fallStartY;
+        
+        // Only show falling animation if falling >= 2.5x player height
+        if (fallDistance >= this.height * 2.5) {
+          this.setAnimationState('falling', true);
+        } else if (this.movementState === 'jumping') {
+          // Maintain last frame of jump animation for small descents
+          this.animation.currentFrame = this.animation.animations['jumping'].frameCount - 1;
+          this.animation.isPlaying = false; // Freeze animation
+        }
       }
       return;
     }
 
-    // Grounded states (on platforms)
+    // Grounded states
     if (Math.abs(this.velocity.x) > 10) {
       this.setAnimationState('running', true);
     } else {
@@ -337,6 +356,7 @@ class Player {
     // Reset fall tracking
     this.isFalling = false;
     this.fallStartY = 0;
+    this.inJump = false; // Add this line
     
     // Play appropriate landing animation
     if (Math.abs(this.velocity.x) > 10) {
@@ -344,9 +364,8 @@ class Player {
     } else {
       this.setAnimationState('idle', true);
     }
-    // soundManager can be input here
-
   }
+
 
   setAnimationState(state, loop) {
     if (this.movementState === state) return;
@@ -360,9 +379,10 @@ class Player {
         this.animation.play('running', loop);
         break;
       case 'jumping':
-        this.animation.play('jumping', loop, 0.1, () => {
-          if (!this.isOnGround && this.velocity.y >= 0) {
-            this.setAnimationState('falling', true);
+        this.animation.play('jumping', false, 0.1, () => {
+          // When jump animation completes, lock on last frame
+          if (!this.isOnGround) {
+            this.animation.currentFrame = this.animation.animations['jumping'].frameCount - 1;
           }
         });
         break;
