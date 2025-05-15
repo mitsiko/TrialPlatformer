@@ -71,6 +71,8 @@ class Player {
     
     // Draw animation centered horizontally and aligned at feet
     this.animation.draw(c, drawX, drawY);
+
+    /*
     
     // DEBUG: Draw collision box
     c.fillStyle = 'rgba(255, 0, 0, 0.3)';
@@ -101,11 +103,17 @@ class Player {
     c.font = '12px Arial';
     c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20, 30);
     c.fillText(`Velocity Y: ${this.velocity.y.toFixed(1)}`, 20, 50);
+
+    */
   }
 
   update(deltaTime, collisionBlocks, platforms) {
     if (!deltaTime) return;
 
+    if (!this.isOnGround) {
+      console.log("Current fall distance:", this.y - this.fallStartY, 
+                "Threshold:", this.height * FALL_DAMAGE_HEIGHT);
+    }
     // Update animation first
     this.animation.update(deltaTime);
 
@@ -140,6 +148,9 @@ class Player {
 
       // Check platform collisions
       this.checkPlatformCollisions(platforms, deltaTime);
+      if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        this.checkSpikeCollisions(layersData.l_Spikes);
+      }
 
       // Update movement state - must be last!
       this.updateMovementState(wasOnGround);
@@ -147,6 +158,7 @@ class Player {
   }
 
 
+  // In Player.js - update the updateInvincibility method
   updateInvincibility(deltaTime) {
     if (this.isInvincible) {
       this.invincibilityTimer += deltaTime;
@@ -166,26 +178,27 @@ class Player {
     }
   }
   
-  
+    // In Player.js - update the updateFallTracking method
   updateFallTracking() {
     // Start tracking fall if moving downward and not on ground
     if (this.velocity.y > 0 && !this.isOnGround && !this.isFalling) {
       this.fallStartY = this.y;
       this.isFalling = true;
-      this.fallingFromJump = this.movementState === 'jumping'; // Track if falling from jump
+      console.log("Fall started from height:", this.fallStartY);
     }
     
     // Check for landing after a fall
     if (this.isFalling && this.isOnGround) {
       const fallDistance = this.y - this.fallStartY;
+      console.log("Fall distance:", fallDistance, "Player height:", this.height, "Threshold:", this.height * FALL_DAMAGE_HEIGHT);
       
       // Check if fall is high enough for damage
-      if (fallDistance > this.height * FALL_DAMAGE_HEIGHT) {
+      if (fallDistance >= this.height * FALL_DAMAGE_HEIGHT && !this.isInvincible) {
+        console.log("Fall damage triggered!");
         this.takeDamage();
       }
       
       this.isFalling = false;
-      this.fallingFromJump = false;
     }
   }
 
@@ -225,24 +238,30 @@ class Player {
     soundManager.playSound('landing');
   }
   
+  // In Player.js - update the takeDamage method
   takeDamage() {
-    // Skip if already invincible
-    if (this.isInvincible) return;
+    // Skip if already invincible or in death state
+    if (this.isInvincible || this.movementState === 'death') return;
+    
+    console.log("Player took damage!");
     
     // Remove a life if GameStateManager exists
     if (typeof gameStateManager !== 'undefined') {
       gameStateManager.removeLife();
     }
     
-    // If player is still alive, make them invincible temporarily
-    if (typeof gameStateManager !== 'undefined' && gameStateManager.lives > 0) {
-      this.isInvincible = true;
-      this.invincibilityTimer = 0;
-    } else {
+    // Make player invincible temporarily
+    this.isInvincible = true;
+    this.invincibilityTimer = 0;
+    this.blinkTimer = 0;
+    this.isVisible = true;
+    
+    // If no lives left, die
+    if (typeof gameStateManager !== 'undefined' && gameStateManager.lives <= 0) {
       this.die();
     }
   }
-  
+
   die() {
     this.movementState = 'death';
     this.inputLocked = true;
@@ -521,25 +540,36 @@ class Player {
   
   // Check for collision with spikes
   checkSpikeCollisions(spikesLayer) {
-    // Calculate tile coordinates
+    if (this.isInvincible) return; // Skip if invincible
+    
     const tileSize = 16;
-    const playerCenterX = this.x + this.width / 2;
-    const playerBottom = this.y + this.height;
-    
-    const tileX = Math.floor(playerCenterX / tileSize);
-    const tileY = Math.floor(playerBottom / tileSize);
-    
+    // Check multiple points around the player's collision box
+    const checkPoints = [
+      // Bottom points (feet)
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y + this.collisionSize.height },
+      // Top points (head)
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y },
+      // Left side
+      { x: this.x + this.collisionOffset.x, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 },
+      // Right side
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 }
+    ];
+
     // Spike tile IDs
     const spikeTiles = [7, 8, 87, 88];
     
-    // Check the tile at the player's position
-    if (
-      tileY >= 0 && tileY < spikesLayer.length &&
-      tileX >= 0 && tileX < spikesLayer[tileY].length &&
-      spikeTiles.includes(spikesLayer[tileY][tileX])
-    ) {
-      // Take damage
-      this.takeDamage();
+    for (let point of checkPoints) {
+      const tileX = Math.floor(point.x / tileSize);
+      const tileY = Math.floor(point.y / tileSize);
+      
+      if (
+        tileY >= 0 && tileY < spikesLayer.length &&
+        tileX >= 0 && tileX < spikesLayer[tileY].length &&
+        spikeTiles.includes(spikesLayer[tileY][tileX])
+      ) {
+        this.takeDamage();
+        break; // Only take damage once per check
+      }
     }
   }
   

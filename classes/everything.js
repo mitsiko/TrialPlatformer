@@ -117,7 +117,7 @@ class AnimationController {
     }
   }
     
-    
+      
   draw(context, x, y) {
     if (!this.initialized || !this.currentAnimation) return;
     
@@ -128,22 +128,31 @@ class AnimationController {
     
     context.save();
     
-    // Handle flipping for direction
+    // Calculate draw position (center-bottom aligned)
+    const drawX = x - animation.frameWidth / 2; // Center horizontally
+    const drawY = y - animation.frameHeight;    // Align bottom
+    
     if (this.flipped) {
-      context.translate(x + animation.frameWidth / 2, y);
+      // For left-facing sprites
+      context.translate(drawX + animation.frameWidth, drawY);
       context.scale(-1, 1);
-      x = -animation.frameWidth / 2;
+      context.drawImage(
+        animation.spriteSheet,
+        frame.x, frame.y, 
+        frame.width, frame.height,
+        0, 0,
+        frame.width, frame.height
+      );
+    } else {
+      // For right-facing sprites (default)
+      context.drawImage(
+        animation.spriteSheet,
+        frame.x, frame.y, 
+        frame.width, frame.height,
+        drawX, drawY,
+        frame.width, frame.height
+      );
     }
-    
-    // Adjust y position to account for different sprite heights
-    // The origin is bottom-center of the sprite
-    const yOffset = animation.frameHeight - 32; // Adjust based on standard height of 32px
-    
-    context.drawImage(
-      animation.spriteSheet,
-      frame.x, frame.y, frame.width, frame.height,
-      x, y - yOffset, frame.width, frame.height
-    );
     
     context.restore();
   }
@@ -180,6 +189,285 @@ class AnimationController {
   }
 }
 
+// ./classes/GameStateManager.js
+// GameStateManager.js - Handle game state transitions and logic
+class GameStateManager {
+  constructor() {
+    this.states = {
+      INTRO: 'intro',
+      PLAYING: 'playing',
+      PAUSED: 'paused',
+      LEVEL_COMPLETE: 'levelComplete',
+      GAME_OVER: 'gameOver'
+    };
+    
+    this.currentState = this.states.INTRO;
+    this.stateChangeCallbacks = {};
+    this.stateEnteredTime = 0;
+    this.lives = 3;
+    this.coins = 0;
+    this.cans = 0;
+    this.coinsCollected = new Set();
+    this.cansCollected = new Set();
+  }
+  
+  startGame() {
+    if (this.currentState === this.states.INTRO || 
+        this.currentState === this.states.PAUSED) {
+      this.changeState(this.states.PLAYING);
+    }
+  }
+  
+  init() {
+    this.reset();
+  }
+  
+  reset() {
+    this.changeState(this.states.INTRO);
+  }
+  
+  changeState(newState) {
+    const oldState = this.currentState;
+    this.currentState = newState;
+    this.stateEnteredTime = timeManager.gameTime;
+    
+    if (this.stateChangeCallbacks[newState]) {
+      this.stateChangeCallbacks[newState].forEach(callback => callback(oldState));
+    }
+    
+    switch (newState) {
+      case this.states.INTRO:
+        soundManager.stopMusic();
+        timeManager.reset();
+        this.lives = 3;
+        this.coins = 0;
+        this.cans = 0;
+        this.coinsCollected.clear();
+        this.cansCollected.clear();
+        break;
+        
+      case this.states.PLAYING:
+        timeManager.resume();
+        if (oldState === this.states.INTRO || oldState === this.states.PAUSED) {
+          soundManager.playMusic('intro');
+        }
+        break;
+        
+      case this.states.PAUSED:
+        soundManager.pauseMusic();
+        timeManager.pause();
+        break;
+        
+      case this.states.LEVEL_COMPLETE:
+        soundManager.playMusic('win');
+        timeManager.setTimeout(() => this.changeState(this.states.INTRO), 3);
+        break;
+        
+      case this.states.GAME_OVER:
+        soundManager.playMusic('gameOver');
+        timeManager.setTimeout(() => this.changeState(this.states.INTRO), 8);
+        break;
+    }
+  }
+  
+  onStateChange(state, callback) {
+    if (!this.stateChangeCallbacks[state]) {
+      this.stateChangeCallbacks[state] = [];
+    }
+    this.stateChangeCallbacks[state].push(callback);
+  }
+  
+  isState(state) {
+    return this.currentState === state;
+  }
+  
+  getStateTime() {
+    return timeManager.gameTime - this.stateEnteredTime;
+  }
+  
+  // Player stats methods
+  addCoin() {
+    this.coins++;
+    soundManager.playSound('coin'); 
+
+  }
+  
+  addCan() {
+    this.cans++;
+    this.addLife();
+    soundManager.playSound('can');
+  }
+  
+  addLife() {
+    this.lives++;
+  }
+  
+  removeLife() {
+    this.lives--;
+    soundManager.playSound('hurt');
+    
+    if (this.lives <= 0) {
+      this.changeState(this.states.GAME_OVER);
+    }
+    
+    return this.lives;
+  }
+  
+  // Check if item was already collected
+  isItemCollected(type, x, y) {
+    const key = `${x},${y}`;
+    if (type === 'coin') {
+      return this.coinsCollected.has(key);
+    } else if (type === 'can') {
+      return this.cansCollected.has(key);
+    }
+    return false;
+  }
+  
+  // Mark item as collected
+  markItemCollected(type, x, y) {
+    const key = `${x},${y}`;
+    if (type === 'coin') {
+      this.coinsCollected.add(key);
+    } else if (type === 'can') {
+      this.cansCollected.add(key);
+    }
+  }
+}
+
+// ./classes/HUD.js
+// HUD.js - Heads-up display rendering
+class HUD {
+  constructor() {
+    this.lifeIcon = null;
+    this.coinIcon = null;
+    this.canIcon = null;
+    this.timerIcon = null;
+    this.initialized = false;
+    
+    // Font settings
+    this.fontFamily = 'monospace'; // Use monospace as a pixel font alternative
+    this.fontSize = 16;
+    this.fontColor = '#FFFFFF'; // Cream color
+  }
+  
+  async init() {
+    try {
+      // Load HUD icons
+      this.lifeIcon = await loadImage('images/lifeFlag.png');
+      this.coinIcon = await loadImage('images/CoinSprite.png');
+      this.canIcon = await loadImage('images/CanSprite.png');
+      this.timerIcon = await loadImage('images/timerSprite.png');
+      
+      this.initialized = true;
+    } catch (error) {
+      console.error('Failed to load HUD icons:', error);
+    }
+  }
+  
+  draw(context) {
+    if (!this.initialized) return;
+    
+    // Save current context state
+    context.save();
+    
+    // Reset transformations to draw directly on screen
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Set font style
+    context.font = `${this.fontSize}px ${this.fontFamily}`;
+    context.fillStyle = this.fontColor;
+    
+    // Draw lives (top-left)
+    this.drawLives(context);
+    
+    // Draw coins and cans counter
+    this.drawCoins(context);
+    this.drawCans(context);
+    
+    // Draw timer (top-right)
+    this.drawTimer(context);
+    
+    // Restore context state
+    context.restore();
+  }
+  
+  drawLives(context) {
+    const lives = gameStateManager.lives;
+    const iconSize = 16;
+    const spacing = 8;
+    const startX = 10;
+    const startY = 10;
+    
+    for (let i = 0; i < lives; i++) {
+      context.drawImage(
+        this.lifeIcon,
+        startX + i * (iconSize + spacing),
+        startY,
+        iconSize,
+        iconSize
+      );
+    }
+  }
+  
+  drawCoins(context) {
+    const coins = gameStateManager.coins;
+    const iconSize = 16;
+    const startX = 10;
+    const startY = 36; // Below lives
+    
+    // Draw coin icon
+    context.drawImage(
+      this.coinIcon,
+      startX,
+      startY,
+      iconSize,
+      iconSize
+    );
+    
+    // Draw coin count
+    context.fillText(`x ${coins}`, startX + iconSize + 5, startY + iconSize - 2);
+  }
+  
+  drawCans(context) {
+    const cans = gameStateManager.cans;
+    const iconSize = 16;
+    const startX = 10;
+    const startY = 62; // Below coins
+    
+    // Draw can icon
+    context.drawImage(
+      this.canIcon,
+      startX,
+      startY,
+      iconSize,
+      iconSize
+    );
+    
+    // Draw can count
+    context.fillText(`x ${cans}`, startX + iconSize + 5, startY + iconSize - 2);
+  }
+  
+  drawTimer(context) {
+    const timerText = timeManager.getFormattedTime();
+    const iconSize = 16;
+    const startX = canvas.width / dpr - 110;
+    const startY = 10;
+    
+    // Draw timer icon
+    context.drawImage(
+      this.timerIcon,
+      startX,
+      startY,
+      iconSize,
+      iconSize
+    );
+    
+    // Draw timer text
+    context.fillText(timerText, startX + iconSize + 5, startY + iconSize - 2);
+  }
+}
+
 
 // ./classes/Player.js
 // Updated Player.js with animation and movement states
@@ -189,7 +477,6 @@ const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
 const GRAVITY = 900;          // Increased from 580 for snappier falls
 const SKID_DECELERATION = 20; // Add this new constant
 const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
-// At the top of Player.js
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
 const FALL_ANIMATION_HEIGHT = 2; // Multiple of player height for falling animation
 
@@ -250,11 +537,11 @@ class Player {
   draw(c) {
     if (this.isInvincible && !this.isVisible) return;
     
-    // Calculate actual draw position
-    const drawX = this.x + this.width/2;
-    const drawY = this.y + this.height; // Anchor at feet
+    // Calculate actual draw position (bottom-center of collision box)
+    const drawX = this.x + this.width / 2;  // Center of player
+    const drawY = this.y + this.height;     // Bottom of player
     
-    // Draw animation centered horizontally
+    // Draw animation centered horizontally and aligned at feet
     this.animation.draw(c, drawX, drawY);
     
     // DEBUG: Draw collision box
@@ -281,7 +568,7 @@ class Player {
       this.y + this.height/2 - 2,
       4, 4
     );
-
+    
     c.fillStyle = 'white';
     c.font = '12px Arial';
     c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20, 30);
@@ -1005,77 +1292,3 @@ const startGame = async () => {
 // Start the game
 startGame();
 
-// ./index.html
-<!DOCTYPE html>
-<html>
-<head>
-    <link rel="icon" href="data:,"> <!-- Empty favicon to prevent 404 -->
-    <title>2D Platformer</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            border: 0;
-            font: inherit;
-            vertical-align: baseline;
-        }
-        body {
-            background: black;
-            margin: 0;
-            overflow: hidden;
-        }
-        canvas {
-            width: 1024px;
-            height: 576px;
-            image-rendering: pixelated;
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    <canvas id="gameCanvas"></canvas>
-    
-    <!--
-    <div style="position: absolute; top: 10px; left: 10px; z-index: 100;">
-         <button onclick="gameStateManager.startGame()">Force Start Game</button>
-    </div>
-    -->
-
-    <!-- Core Systems -->
-    <script src="./classes/TimeManager.js"></script>
-    <script src="./classes/SoundManager.js"></script>
-    <script src="./classes/GameStateManager.js"></script>
-
-    <!-- Other Classes -->
-    <script src="./classes/AnimationController.js"></script>
-    <script src="./classes/CameraController.js"></script>
-    <script src="./classes/GameRenderer.js"></script>
-    <script src="./classes/HUD.js"></script>
-    <script src="./classes/CollisionBlock.js"></script>
-    <script src="./classes/Platform.js"></script>
-    <script src="./classes/Player.js"></script>
-
-    <!-- Utils -->
-    <script src="./js/utils.js"></script>
-    
-    <!-- Layer Data -->
-    <script src="./data/l_BackgroundColor.js"></script>
-    <script src="./data/l_Pines1.js"></script>
-    <script src="./data/l_Pines2.js"></script>
-    <script src="./data/l_Pines3.js"></script>
-    <script src="./data/l_Pines4.js"></script>
-    <script src="./data/l_Platforms1.js"></script>
-    <script src="./data/l_Platfroms2.js"></script>
-    <script src="./data/l_Spikes.js"></script>
-    <script src="./data/l_Collisions.js"></script>
-    <script src="./data/l_Grass.js"></script>
-    <script src="./data/l_Coins.js"></script>
-    <script src="./data/l_Cans.js"></script>
-    <script src="./data/collisions.js"></script>
-    
-    <!-- Main Game Code -->
-    <script src="./js/eventListeners.js"></script>
-    <script src="./js/index.js"></script>
-</body>
-</html>
