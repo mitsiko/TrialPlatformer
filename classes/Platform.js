@@ -13,8 +13,11 @@ class Platform {
   
   checkCollision(player, deltaTime) {
     return (
-      player.y + player.height <= this.y &&
+      // Player's feet are above platform
+      player.y + player.height <= this.y + 2 && // Small tolerance
+      // Player is moving downward toward platform
       player.y + player.height + player.velocity.y * deltaTime >= this.y &&
+      // Player is horizontally within platform bounds
       player.x + player.width > this.x &&
       player.x < this.x + this.width
     )
