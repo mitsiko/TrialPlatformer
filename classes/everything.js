@@ -182,6 +182,22 @@ class AnimationController {
   }
 }
 
+// ./classes/CollisionBlock.js
+class CollisionBlock {
+  constructor({ x, y, size }) {
+    this.x = x
+    this.y = y
+    this.width = size
+    this.height = size
+  }
+
+  draw(c) {
+    // Optional: Draw collision blocks for debugging
+    c.fillStyle = 'rgba(255, 0, 0, 0.5)'
+    c.fillRect(this.x, this.y, this.width, this.height)
+  }
+}
+
 // ./classes/Platform.js
 class Platform {
   constructor({ x, y, width = 16, height = 4 }) {
@@ -198,8 +214,11 @@ class Platform {
   
   checkCollision(player, deltaTime) {
     return (
-      player.y + player.height <= this.y &&
+      // Player's feet are above platform
+      player.y + player.height <= this.y + 2 && // Small tolerance
+      // Player is moving downward toward platform
       player.y + player.height + player.velocity.y * deltaTime >= this.y &&
+      // Player is horizontally within platform bounds
       player.x + player.width > this.x &&
       player.x < this.x + this.width
     )
@@ -208,9 +227,9 @@ class Platform {
 
 // ./classes/Player.js
 // Updated Player.js with animation and movement states
-const X_VELOCITY = 180;       // Reduced from 200 for better control
-const JUMP_POWER = 400;       // Increased from 250 for better feel
-const VERTICAL_HOP_POWER = 180; // Smaller jump for vertical hops
+const X_VELOCITY = 150;       // Reduced from 200 for better control
+const JUMP_POWER = 350;       // Increased from 250 for better feel
+const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
 const GRAVITY = 900;          // Increased from 580 for snappier falls
 const SKID_DECELERATION = 20; // Add this new constant
 const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
@@ -335,21 +354,17 @@ class Player {
         this.handleInput(keys);
       }
 
-      // Update horizontal position and check collisions
+      // Update horizontal position first
       this.x += this.velocity.x * deltaTime;
-      this.checkForHorizontalCollisions(collisionBlocks);
 
-      // Check platform collisions
-      this.checkPlatformCollisions(platforms, deltaTime);
-
-      // Update vertical position and check collisions
+      // Update vertical position
       this.y += this.velocity.y * deltaTime;
-      this.checkForVerticalCollisions(collisionBlocks);
-
-      // Check bounds
-      if (this.y > canvas.height / dpr + 40) {
-        this.die();
-      }
+      
+      // Reset grounded state before checking collisions
+      this.isOnGround = false;
+      
+      // Check platform collisions first (since we removed blocks)
+      this.checkPlatformCollisions(platforms, deltaTime);
 
       // Update movement state
       this.updateMovementState();
@@ -523,54 +538,47 @@ class Player {
 
 
   updateMovementState() {
-    // Skip if in death state
-    if (this.movementState === 'death') {
-      return;
-    }
+    if (this.movementState === 'death') return;
 
     // Airborne states
     if (!this.isOnGround) {
       if (this.velocity.y < 0) {
-        // Only change to jumping if not already in that state
-        if (this.movementState !== 'jumping') {
-          this.movementState = 'jumping';
-          if (this.animation.currentAnimation !== 'jumping') {
-            this.animation.play('jumping', false, 0.1, () => {
-              if (this.velocity.y > 0) {
-                this.movementState = 'falling';
-                this.animation.play('falling', true);
-              }
-            });
-          }
-        }
+        this.setAnimationState('jumping', false);
       } else {
-        // Only change to falling if not already in that state
-        if (this.movementState !== 'falling') {
-          this.movementState = 'falling';
-          this.animation.play('falling', true);
-        }
+        this.setAnimationState('falling', true);
       }
       return;
     }
 
-    // Grounded states
-    if (this.isOnGround) {
-      // Unlock input when grounded
-      if (this.inputLocked && this.movementState !== 'death') {
-        this.inputLocked = false;
-      }
-      
-      if (this.velocity.x !== 0) {
-        if (this.movementState !== 'running') {
-          this.movementState = 'running';
-          this.animation.play('running', true);
-        }
-      } else {
-        if (this.movementState !== 'idle') {
-          this.movementState = 'idle';
-          this.animation.play('idle', true);
-        }
-      }
+    // Grounded states (on platforms)
+    if (Math.abs(this.velocity.x) > 10) {
+      this.setAnimationState('running', true);
+    } else {
+      this.setAnimationState('idle', true);
+    }
+  }
+
+  setAnimationState(state, loop) {
+    if (this.movementState === state) return;
+    
+    this.movementState = state;
+    switch(state) {
+      case 'idle':
+        this.animation.play('idle', loop);
+        break;
+      case 'running':
+        this.animation.play('running', loop);
+        break;
+      case 'jumping':
+        this.animation.play('jumping', loop, 0.1, () => {
+          if (!this.isOnGround && this.velocity.y >= 0) {
+            this.setAnimationState('falling', true);
+          }
+        });
+        break;
+      case 'falling':
+        this.animation.play('falling', loop);
+        break;
     }
   }
 
@@ -635,7 +643,7 @@ class Player {
   checkPlatformCollisions(platforms, deltaTime) {
     const buffer = 0.0001;
     
-    // Only check if moving downward
+    // Only check if moving downward or stationary
     if (this.velocity.y <= 0) return;
 
     const collisionBox = {
@@ -646,13 +654,14 @@ class Player {
     };
 
     for (let platform of platforms) {
-      // Use platform's own collision check function
+      // Check if player is above the platform and moving downward
       if (platform.checkCollision(this, deltaTime)) {
         this.velocity.y = 0;
         this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
         this.isOnGround = true;
-        this.canJump = true; // Reset ability to jump
-        return;
+        this.canJump = true;
+        this.inputLocked = false;
+        break; // Only need one platform collision
       }
     }
   }
@@ -736,22 +745,6 @@ class Player {
         gameStateManager.changeState(gameStateManager.states.LEVEL_COMPLETE);
       }
     }
-  }
-}
-
-// ./classes/CollisionBlock.js
-class CollisionBlock {
-  constructor({ x, y, size }) {
-    this.x = x
-    this.y = y
-    this.width = size
-    this.height = size
-  }
-
-  draw(c) {
-    // Optional: Draw collision blocks for debugging
-    c.fillStyle = 'rgba(255, 0, 0, 0.5)'
-    c.fillRect(this.x, this.y, this.width, this.height)
   }
 }
 

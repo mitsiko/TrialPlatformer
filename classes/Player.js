@@ -110,6 +110,10 @@ class Player {
     // Update invincibility state
     this.updateInvincibility(deltaTime);
 
+    // Store previous grounded state for fall tracking
+    const wasOnGround = this.isOnGround;
+    this.isOnGround = false; // Reset each frame
+
     // Apply gravity if not grounded
     if (!this.isOnGround) {
       this.applyGravity(deltaTime);
@@ -131,15 +135,12 @@ class Player {
 
       // Update vertical position
       this.y += this.velocity.y * deltaTime;
-      
-      // Reset grounded state before checking collisions
-      this.isOnGround = false;
-      
-      // Check platform collisions first (since we removed blocks)
+
+      // Check platform collisions
       this.checkPlatformCollisions(platforms, deltaTime);
 
-      // Update movement state
-      this.updateMovementState();
+      // Update movement state - must be last!
+      this.updateMovementState(wasOnGround);
     }
   }
 
@@ -309,8 +310,14 @@ class Player {
   }
 
 
-  updateMovementState() {
+  updateMovementState(wasOnGround) {
     if (this.movementState === 'death') return;
+
+    // Handle landing detection
+    if (!wasOnGround && this.isOnGround) {
+      this.handleLanding();
+      return;
+    }
 
     // Airborne states
     if (!this.isOnGround) {
@@ -323,6 +330,19 @@ class Player {
     }
 
     // Grounded states (on platforms)
+    if (Math.abs(this.velocity.x) > 10) {
+      this.setAnimationState('running', true);
+    } else {
+      this.setAnimationState('idle', true);
+    }
+  }
+
+  handleLanding() {
+    // Reset fall tracking
+    this.isFalling = false;
+    this.fallStartY = 0;
+    
+    // Play appropriate landing animation
     if (Math.abs(this.velocity.x) > 10) {
       this.setAnimationState('running', true);
     } else {
@@ -426,7 +446,6 @@ class Player {
     };
 
     for (let platform of platforms) {
-      // Check if player is above the platform and moving downward
       if (platform.checkCollision(this, deltaTime)) {
         this.velocity.y = 0;
         this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
