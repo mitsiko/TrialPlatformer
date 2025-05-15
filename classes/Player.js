@@ -5,7 +5,6 @@ const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
 const GRAVITY = 900;          // Increased from 580 for snappier falls
 const SKID_DECELERATION = 20; // Add this new constant
 const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
-// At the top of Player.js
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
 const FALL_ANIMATION_HEIGHT = 2; // Multiple of player height for falling animation
 
@@ -66,11 +65,11 @@ class Player {
   draw(c) {
     if (this.isInvincible && !this.isVisible) return;
     
-    // Calculate actual draw position
-    const drawX = this.x + this.width/2;
-    const drawY = this.y + this.height; // Anchor at feet
+    // Calculate actual draw position (bottom-center of collision box)
+    const drawX = this.x + this.width / 2;  // Center of player
+    const drawY = this.y + this.height;     // Bottom of player
     
-    // Draw animation centered horizontally
+    // Draw animation centered horizontally and aligned at feet
     this.animation.draw(c, drawX, drawY);
     
     // DEBUG: Draw collision box
@@ -97,7 +96,7 @@ class Player {
       this.y + this.height/2 - 2,
       4, 4
     );
-
+    
     c.fillStyle = 'white';
     c.font = '12px Arial';
     c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20, 30);

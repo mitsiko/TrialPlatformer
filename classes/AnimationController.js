@@ -116,7 +116,7 @@ class AnimationController {
     }
   }
     
-    
+      
   draw(context, x, y) {
     if (!this.initialized || !this.currentAnimation) return;
     
@@ -127,22 +127,31 @@ class AnimationController {
     
     context.save();
     
-    // Handle flipping for direction
+    // Calculate draw position (center-bottom aligned)
+    const drawX = x - animation.frameWidth / 2; // Center horizontally
+    const drawY = y - animation.frameHeight;    // Align bottom
+    
     if (this.flipped) {
-      context.translate(x + animation.frameWidth / 2, y);
+      // For left-facing sprites
+      context.translate(drawX + animation.frameWidth, drawY);
       context.scale(-1, 1);
-      x = -animation.frameWidth / 2;
+      context.drawImage(
+        animation.spriteSheet,
+        frame.x, frame.y, 
+        frame.width, frame.height,
+        0, 0,
+        frame.width, frame.height
+      );
+    } else {
+      // For right-facing sprites (default)
+      context.drawImage(
+        animation.spriteSheet,
+        frame.x, frame.y, 
+        frame.width, frame.height,
+        drawX, drawY,
+        frame.width, frame.height
+      );
     }
-    
-    // Adjust y position to account for different sprite heights
-    // The origin is bottom-center of the sprite
-    const yOffset = animation.frameHeight - 32; // Adjust based on standard height of 32px
-    
-    context.drawImage(
-      animation.spriteSheet,
-      frame.x, frame.y, frame.width, frame.height,
-      x, y - yOffset, frame.width, frame.height
-    );
     
     context.restore();
   }
