@@ -1,7 +1,7 @@
 // Updated Player.js with animation and movement states
-const X_VELOCITY = 180;       // Reduced from 200 for better control
-const JUMP_POWER = 400;       // Increased from 250 for better feel
-const VERTICAL_HOP_POWER = 180; // Smaller jump for vertical hops
+const X_VELOCITY = 150;       // Reduced from 200 for better control
+const JUMP_POWER = 350;       // Increased from 250 for better feel
+const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
 const GRAVITY = 900;          // Increased from 580 for snappier falls
 const SKID_DECELERATION = 20; // Add this new constant
 const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
