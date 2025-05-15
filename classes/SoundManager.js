@@ -19,7 +19,7 @@ class SoundManager {
     this.loadSound('jump', 'sounds/jumping.mp3');
     this.loadSound('coin', 'sounds/coinDropTrimmed.mp3');
     this.loadSound('can', 'sounds/metalTrimmed.mp3');
-    this.loadSound('hurt', 'sounds/landingTrimmed.mp3');
+    this.loadSound('landing', 'sounds/landingTrimmed.mp3');
     
     this.initialized = true;
   }

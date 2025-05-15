@@ -1,5 +1,5 @@
 // Updated Player.js with animation and movement states
-const X_VELOCITY = 150;       // Reduced from 200 for better control
+const X_VELOCITY = 120;       // Reduced from 200 for better control
 const JUMP_POWER = 350;       // Increased from 250 for better feel
 const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
 const GRAVITY = 900;          // Increased from 580 for snappier falls
@@ -201,10 +201,7 @@ class Player {
         this.movementState = 'falling';
         this.animation.play('falling', true);
       });
-      
-      // Could play jump sound here if available
-      // soundManager.playSound('jump');
-    }
+      soundManager.playSound('landing');    }
   }
   
   
@@ -220,10 +217,9 @@ class Player {
       
       // Play falling animation for the hop
       this.animation.play('falling', true);
-      
       // Could play jump sound here
-      // soundManager.playSound('jump');
     }
+    soundManager.playSound('landing');
   }
   
   takeDamage() {
@@ -348,6 +344,8 @@ class Player {
     } else {
       this.setAnimationState('idle', true);
     }
+    // soundManager can be input here
+
   }
 
   setAnimationState(state, loop) {

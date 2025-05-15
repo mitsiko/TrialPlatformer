@@ -96,7 +96,8 @@ class GameStateManager {
   // Player stats methods
   addCoin() {
     this.coins++;
-    soundManager.playSound('coin');
+    soundManager.playSound('coin'); 
+
   }
   
   addCan() {

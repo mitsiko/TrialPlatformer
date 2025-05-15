@@ -181,23 +181,6 @@ class AnimationController {
     }
   }
 }
-
-// ./classes/CollisionBlock.js
-class CollisionBlock {
-  constructor({ x, y, size }) {
-    this.x = x
-    this.y = y
-    this.width = size
-    this.height = size
-  }
-
-  draw(c) {
-    // Optional: Draw collision blocks for debugging
-    c.fillStyle = 'rgba(255, 0, 0, 0.5)'
-    c.fillRect(this.x, this.y, this.width, this.height)
-  }
-}
-
 // ./classes/Platform.js
 class Platform {
   constructor({ x, y, width = 16, height = 4 }) {
@@ -224,10 +207,9 @@ class Platform {
     )
   }
 }
-
 // ./classes/Player.js
 // Updated Player.js with animation and movement states
-const X_VELOCITY = 150;       // Reduced from 200 for better control
+const X_VELOCITY = 120;       // Reduced from 200 for better control
 const JUMP_POWER = 350;       // Increased from 250 for better feel
 const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
 const GRAVITY = 900;          // Increased from 580 for snappier falls
@@ -338,6 +320,10 @@ class Player {
     // Update invincibility state
     this.updateInvincibility(deltaTime);
 
+    // Store previous grounded state for fall tracking
+    const wasOnGround = this.isOnGround;
+    this.isOnGround = false; // Reset each frame
+
     // Apply gravity if not grounded
     if (!this.isOnGround) {
       this.applyGravity(deltaTime);
@@ -359,15 +345,12 @@ class Player {
 
       // Update vertical position
       this.y += this.velocity.y * deltaTime;
-      
-      // Reset grounded state before checking collisions
-      this.isOnGround = false;
-      
-      // Check platform collisions first (since we removed blocks)
+
+      // Check platform collisions
       this.checkPlatformCollisions(platforms, deltaTime);
 
-      // Update movement state
-      this.updateMovementState();
+      // Update movement state - must be last!
+      this.updateMovementState(wasOnGround);
     }
   }
 
@@ -428,10 +411,7 @@ class Player {
         this.movementState = 'falling';
         this.animation.play('falling', true);
       });
-      
-      // Could play jump sound here if available
-      // soundManager.playSound('jump');
-    }
+      soundManager.playSound('landing');    }
   }
   
   
@@ -447,10 +427,9 @@ class Player {
       
       // Play falling animation for the hop
       this.animation.play('falling', true);
-      
       // Could play jump sound here
-      // soundManager.playSound('jump');
     }
+    soundManager.playSound('landing');
   }
   
   takeDamage() {
@@ -537,8 +516,14 @@ class Player {
   }
 
 
-  updateMovementState() {
+  updateMovementState(wasOnGround) {
     if (this.movementState === 'death') return;
+
+    // Handle landing detection
+    if (!wasOnGround && this.isOnGround) {
+      this.handleLanding();
+      return;
+    }
 
     // Airborne states
     if (!this.isOnGround) {
@@ -556,6 +541,21 @@ class Player {
     } else {
       this.setAnimationState('idle', true);
     }
+  }
+
+  handleLanding() {
+    // Reset fall tracking
+    this.isFalling = false;
+    this.fallStartY = 0;
+    
+    // Play appropriate landing animation
+    if (Math.abs(this.velocity.x) > 10) {
+      this.setAnimationState('running', true);
+    } else {
+      this.setAnimationState('idle', true);
+    }
+    // soundManager can be input here
+
   }
 
   setAnimationState(state, loop) {
@@ -654,7 +654,6 @@ class Player {
     };
 
     for (let platform of platforms) {
-      // Check if player is above the platform and moving downward
       if (platform.checkCollision(this, deltaTime)) {
         this.velocity.y = 0;
         this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
@@ -1008,7 +1007,6 @@ const startGame = async () => {
 startGame();
 
 // ./js/eventListeners.js
-// ./js/eventListeners.js
 console.log("Initializing event listeners...");
 
 window.addEventListener('keydown', (event) => {
@@ -1111,3 +1109,78 @@ document.addEventListener('visibilitychange', () => {
     }
   }
 });
+
+// ./index.html
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" href="data:,"> <!-- Empty favicon to prevent 404 -->
+    <title>2D Platformer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            font: inherit;
+            vertical-align: baseline;
+        }
+        body {
+            background: black;
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            width: 1024px;
+            height: 576px;
+            image-rendering: pixelated;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!--
+    <div style="position: absolute; top: 10px; left: 10px; z-index: 100;">
+         <button onclick="gameStateManager.startGame()">Force Start Game</button>
+    </div>
+    -->
+
+    <!-- Core Systems -->
+    <script src="./classes/TimeManager.js"></script>
+    <script src="./classes/SoundManager.js"></script>
+    <script src="./classes/GameStateManager.js"></script>
+
+    <!-- Other Classes -->
+    <script src="./classes/AnimationController.js"></script>
+    <script src="./classes/CameraController.js"></script>
+    <script src="./classes/GameRenderer.js"></script>
+    <script src="./classes/HUD.js"></script>
+    <script src="./classes/CollisionBlock.js"></script>
+    <script src="./classes/Platform.js"></script>
+    <script src="./classes/Player.js"></script>
+
+    <!-- Utils -->
+    <script src="./js/utils.js"></script>
+    
+    <!-- Layer Data -->
+    <script src="./data/l_BackgroundColor.js"></script>
+    <script src="./data/l_Pines1.js"></script>
+    <script src="./data/l_Pines2.js"></script>
+    <script src="./data/l_Pines3.js"></script>
+    <script src="./data/l_Pines4.js"></script>
+    <script src="./data/l_Platforms1.js"></script>
+    <script src="./data/l_Platfroms2.js"></script>
+    <script src="./data/l_Spikes.js"></script>
+    <script src="./data/l_Collisions.js"></script>
+    <script src="./data/l_Grass.js"></script>
+    <script src="./data/l_Coins.js"></script>
+    <script src="./data/l_Cans.js"></script>
+    <script src="./data/collisions.js"></script>
+    
+    <!-- Main Game Code -->
+    <script src="./js/eventListeners.js"></script>
+    <script src="./js/index.js"></script>
+</body>
+</html>
