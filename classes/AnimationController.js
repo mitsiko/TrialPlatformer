@@ -155,11 +155,9 @@ class AnimationController {
   }
   
   // Check if an animation has completed (for non-looping animations)
+  // In AnimationController.js - add this method
   isComplete() {
     if (!this.currentAnimation || !this.animations[this.currentAnimation]) return false;
-    
-    // Only non-looping animations can be "complete"
-    if (this.isLooping) return false;
     
     const animation = this.animations[this.currentAnimation];
     return !this.isPlaying && this.currentFrame === animation.frameCount - 1;

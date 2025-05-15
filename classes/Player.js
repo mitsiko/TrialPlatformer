@@ -193,15 +193,13 @@ class Player {
 
   jump() {
     if (this.isOnGround && this.canJump && !this.inputLocked) {
-      console.log("Jump executed");
-      this.inJump = true; // Add this line
       this.velocity.y = -JUMP_POWER;
       this.isOnGround = false;
       this.canJump = false;
       this.movementState = 'jumping';
       
       this.animation.play('jumping', false, 0.1, () => {
-        this.inJump = false; // Reset when animation completes
+        // When jump animation completes, lock last frame
         if (!this.isOnGround) {
           this.animation.currentFrame = this.animation.animations['jumping'].frameCount - 1;
           this.animation.isPlaying = false;
@@ -312,6 +310,7 @@ class Player {
   }
 
 
+    // In Player.js - update the updateMovementState method
   updateMovementState(wasOnGround) {
     if (this.movementState === 'death') return;
 
@@ -329,16 +328,16 @@ class Player {
           this.setAnimationState('jumping', false);
         }
       } else {
-        // Going down - check fall distance
-        const fallDistance = this.y - this.fallStartY;
-        
-        // Only show falling animation if falling >= 2.5x player height
-        if (fallDistance >= this.height * 2.5) {
+        // Going down - maintain jump's last frame if this was a jump
+        if (this.movementState === 'jumping') {
+          // Ensure we're showing the last frame
+          if (this.animation.currentAnimation === 'jumping' && this.animation.isComplete()) {
+            this.animation.currentFrame = this.animation.animations['jumping'].frameCount - 1;
+            this.animation.isPlaying = false;
+          }
+        } else {
+          // Only show falling if not from a jump
           this.setAnimationState('falling', true);
-        } else if (this.movementState === 'jumping') {
-          // Maintain last frame of jump animation for small descents
-          this.animation.currentFrame = this.animation.animations['jumping'].frameCount - 1;
-          this.animation.isPlaying = false; // Freeze animation
         }
       }
       return;
@@ -352,23 +351,29 @@ class Player {
     }
   }
 
+  // In Player.js - update the handleLanding method
   handleLanding() {
-    // Reset fall tracking
+    // Reset states
     this.isFalling = false;
     this.fallStartY = 0;
-    this.inJump = false; // Add this line
     
-    // Play appropriate landing animation
+    // Reset animation based on input
     if (Math.abs(this.velocity.x) > 10) {
       this.setAnimationState('running', true);
     } else {
       this.setAnimationState('idle', true);
     }
+    
+    // Reset movement abilities
+    this.canJump = true;
+    this.inputLocked = false;
   }
-
 
   setAnimationState(state, loop) {
     if (this.movementState === state) return;
+    
+    // Never override jump animation while airborne
+    if (this.movementState === 'jumping' && !this.isOnGround) return;
     
     this.movementState = state;
     switch(state) {
@@ -380,9 +385,9 @@ class Player {
         break;
       case 'jumping':
         this.animation.play('jumping', false, 0.1, () => {
-          // When jump animation completes, lock on last frame
           if (!this.isOnGround) {
             this.animation.currentFrame = this.animation.animations['jumping'].frameCount - 1;
+            this.animation.isPlaying = false;
           }
         });
         break;
