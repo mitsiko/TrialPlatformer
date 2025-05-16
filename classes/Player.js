@@ -42,11 +42,11 @@ class Player {
     
     // Updated collision properties
     this.collisionOffset = {
-      x: size * 0.15,  // 15% from left
+      x: size * 0.25,  // 15% from left
       y: size * 0.1    // 10% from top
     };
     this.collisionSize = {
-      width: size * 0.7,
+      width: size * 0.4,
       height: size * 0.9  // 90% of player height
     };
 
@@ -92,8 +92,8 @@ class Player {
         this.fallStartY - 10
       );
     }
-    /*
     
+    /*
     // DEBUG: Draw collision box
     c.fillStyle = 'rgba(255, 0, 0, 0.3)';
     c.fillRect(
@@ -123,8 +123,8 @@ class Player {
     c.font = '12px Arial';
     c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20, 30);
     c.fillText(`Velocity Y: ${this.velocity.y.toFixed(1)}`, 20, 50);
-
     */
+    
   }
 
   update(deltaTime, collisionBlocks, platforms) {
