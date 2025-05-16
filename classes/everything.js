@@ -190,7 +190,6 @@ class AnimationController {
 }
 
 // ./classes/GameStateManager.js
-// GameStateManager.js - Handle game state transitions and logic
 class GameStateManager {
   constructor() {
     this.states = {
@@ -337,6 +336,7 @@ class GameStateManager {
 
 // ./classes/HUD.js
 // HUD.js - Heads-up display rendering
+// HUD.js - Heads-up display rendering
 class HUD {
   constructor() {
     this.lifeIcon = null;
@@ -468,7 +468,6 @@ class HUD {
   }
 }
 
-
 // ./classes/Player.js
 // Updated Player.js with animation and movement states
 const X_VELOCITY = 120;       // Reduced from 200 for better control
@@ -479,6 +478,7 @@ const SKID_DECELERATION = 20; // Add this new constant
 const INVINCIBILITY_TIME = 3; // Seconds of invincibility after taking damage
 const FALL_DAMAGE_HEIGHT = 3; // Multiple of player height for fall damage
 const FALL_ANIMATION_HEIGHT = 2; // Multiple of player height for falling animation
+const PLAYER_HEIGHT = 32;     // Your player's height in pixels
 
 class Player {
   constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
@@ -520,6 +520,9 @@ class Player {
       width: size * 0.7,
       height: size * 0.9  // 90% of player height
     };
+
+    this.maxFallDistance = 0; // Track maximum fall distance
+    this.wasOnGround = true;  // Track previous ground state
     
     console.log("Player initialized");
   }
@@ -543,6 +546,24 @@ class Player {
     
     // Draw animation centered horizontally and aligned at feet
     this.animation.draw(c, drawX, drawY);
+
+    if (!this.isOnGround && this.fallStartY) {
+      c.fillStyle = 'rgba(255, 255, 0, 0.5)';
+      c.fillRect(
+        this.x - 10, 
+        this.fallStartY, 
+        20, 
+        this.y - this.fallStartY
+      );
+      
+      c.fillStyle = 'white';
+      c.fillText(
+        `Fall: ${Math.floor(this.y - this.fallStartY)}px`, 
+        this.x - 30, 
+        this.fallStartY - 10
+      );
+    }
+    /*
     
     // DEBUG: Draw collision box
     c.fillStyle = 'rgba(255, 0, 0, 0.3)';
@@ -573,11 +594,17 @@ class Player {
     c.font = '12px Arial';
     c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20, 30);
     c.fillText(`Velocity Y: ${this.velocity.y.toFixed(1)}`, 20, 50);
+
+    */
   }
 
   update(deltaTime, collisionBlocks, platforms) {
     if (!deltaTime) return;
 
+    if (!this.isOnGround) {
+      console.log("Current fall distance:", this.y - this.fallStartY, 
+                "Threshold:", this.height * FALL_DAMAGE_HEIGHT);
+    }
     // Update animation first
     this.animation.update(deltaTime);
 
@@ -612,6 +639,9 @@ class Player {
 
       // Check platform collisions
       this.checkPlatformCollisions(platforms, deltaTime);
+      if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        this.checkSpikeCollisions(layersData.l_Spikes);
+      }
 
       // Update movement state - must be last!
       this.updateMovementState(wasOnGround);
@@ -619,6 +649,7 @@ class Player {
   }
 
 
+  // In Player.js - update the updateInvincibility method
   updateInvincibility(deltaTime) {
     if (this.isInvincible) {
       this.invincibilityTimer += deltaTime;
@@ -638,26 +669,33 @@ class Player {
     }
   }
   
-  
   updateFallTracking() {
-    // Start tracking fall if moving downward and not on ground
-    if (this.velocity.y > 0 && !this.isOnGround && !this.isFalling) {
+    // Update wasOnGround at start of frame
+    this.wasOnGround = this.isOnGround;
+
+    // Start tracking fall when leaving ground
+    if (this.wasOnGround && !this.isOnGround && this.velocity.y >= 0) {
       this.fallStartY = this.y;
-      this.isFalling = true;
-      this.fallingFromJump = this.movementState === 'jumping'; // Track if falling from jump
+      this.maxFallDistance = 0;
+      console.log("Fall tracking started at Y:", this.fallStartY);
     }
-    
-    // Check for landing after a fall
-    if (this.isFalling && this.isOnGround) {
-      const fallDistance = this.y - this.fallStartY;
+
+    // Update max fall distance while falling
+    if (!this.isOnGround && this.velocity.y > 0) {
+      const currentFallDistance = this.y - this.fallStartY;
+      if (currentFallDistance > this.maxFallDistance) {
+        this.maxFallDistance = currentFallDistance;
+      }
+    }
+
+    // Check for landing and apply damage if needed
+    if (!this.wasOnGround && this.isOnGround) {
+      console.log("Landed after falling", this.maxFallDistance, "pixels");
       
-      // Check if fall is high enough for damage
-      if (fallDistance > this.height * FALL_DAMAGE_HEIGHT) {
+      if (this.maxFallDistance >= this.height * FALL_DAMAGE_HEIGHT && !this.isInvincible) {
+        console.log("Fell", this.maxFallDistance, "pixels - applying damage!");
         this.takeDamage();
       }
-      
-      this.isFalling = false;
-      this.fallingFromJump = false;
     }
   }
 
@@ -697,24 +735,28 @@ class Player {
     soundManager.playSound('landing');
   }
   
+  // In Player.js - update the takeDamage method
   takeDamage() {
-    // Skip if already invincible
-    if (this.isInvincible) return;
+    // Skip if already invincible or in death state
+    if (this.isInvincible || this.movementState === 'death') return;
     
-    // Remove a life if GameStateManager exists
+    console.log("Player took damage from fall!");
+    
+    // Remove a life
     if (typeof gameStateManager !== 'undefined') {
       gameStateManager.removeLife();
     }
     
-    // If player is still alive, make them invincible temporarily
-    if (typeof gameStateManager !== 'undefined' && gameStateManager.lives > 0) {
-      this.isInvincible = true;
-      this.invincibilityTimer = 0;
-    } else {
+    // Start invincibility period
+    this.isInvincible = true;
+    this.invincibilityTimer = 0;
+    
+    // If no lives left, die
+    if (typeof gameStateManager !== 'undefined' && gameStateManager.lives <= 0) {
       this.die();
     }
   }
-  
+
   die() {
     this.movementState = 'death';
     this.inputLocked = true;
@@ -993,25 +1035,36 @@ class Player {
   
   // Check for collision with spikes
   checkSpikeCollisions(spikesLayer) {
-    // Calculate tile coordinates
+    if (this.isInvincible) return; // Skip if invincible
+    
     const tileSize = 16;
-    const playerCenterX = this.x + this.width / 2;
-    const playerBottom = this.y + this.height;
-    
-    const tileX = Math.floor(playerCenterX / tileSize);
-    const tileY = Math.floor(playerBottom / tileSize);
-    
+    // Check multiple points around the player's collision box
+    const checkPoints = [
+      // Bottom points (feet)
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y + this.collisionSize.height },
+      // Top points (head)
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y },
+      // Left side
+      { x: this.x + this.collisionOffset.x, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 },
+      // Right side
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 }
+    ];
+
     // Spike tile IDs
     const spikeTiles = [7, 8, 87, 88];
     
-    // Check the tile at the player's position
-    if (
-      tileY >= 0 && tileY < spikesLayer.length &&
-      tileX >= 0 && tileX < spikesLayer[tileY].length &&
-      spikeTiles.includes(spikesLayer[tileY][tileX])
-    ) {
-      // Take damage
-      this.takeDamage();
+    for (let point of checkPoints) {
+      const tileX = Math.floor(point.x / tileSize);
+      const tileY = Math.floor(point.y / tileSize);
+      
+      if (
+        tileY >= 0 && tileY < spikesLayer.length &&
+        tileX >= 0 && tileX < spikesLayer[tileY].length &&
+        spikeTiles.includes(spikesLayer[tileY][tileX])
+      ) {
+        this.takeDamage();
+        break; // Only take damage once per check
+      }
     }
   }
   
@@ -1291,4 +1344,3 @@ const startGame = async () => {
 
 // Start the game
 startGame();
-

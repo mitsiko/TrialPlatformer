@@ -18,7 +18,7 @@ class AnimationController {
     // Load all player animations - Removed landing animation
     await this.loadAnimation('idle', 'images/idle.png', 1, 32, 32);
     await this.loadAnimation('running', 'images/running.png', 8, 32, 32);
-    await this.loadAnimation('jumping', 'images/jumping.png', 3, 40, 40);
+    await this.loadAnimation('jumping', 'images/jumping2.png', 4, 40, 40);
     await this.loadAnimation('falling', 'images/falling.png', 1, 40, 40);
     await this.loadAnimation('death', 'images/death.png', 1, 32, 32);
     
