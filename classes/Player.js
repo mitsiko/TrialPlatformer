@@ -13,11 +13,8 @@ class Player {
   constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
     this.x = x;
     this.y = y;
-    this.baseWidth = size;  // Native width (32px)
-    this.baseHeight = size; // Native height (32px)
-    this.scale = 1;         // Will be set during initialization
-    this.width = this.baseWidth * this.scale;
-    this.height = this.baseHeight * this.scale;
+    this.width = size;
+    this.height = size;  
     this.velocity = { x: 0, y: 0 }; // Properly initialize velocity object
     this.isOnGround = false;
     
@@ -59,25 +56,6 @@ class Player {
     console.log("Player initialized");
   }
 
-  setScale(newScale) {
-      this.scale = newScale;
-      this.width = this.baseWidth * this.scale;
-      this.height = this.baseHeight * this.scale;
-      
-      // Scale collision properties proportionally
-      this.collisionOffset = {
-          x: this.baseWidth * 0.25 * this.scale,
-          y: this.baseHeight * 0.1 * this.scale
-      };
-      this.collisionSize = {
-          width: this.baseWidth * 0.4 * this.scale,
-          height: this.baseHeight * 0.9 * this.scale
-      };
-      
-      console.log(`Player scaled to ${this.scale}x. New size: ${this.width}x${this.height}`);
-  }
-
-
   async init() {
     // Initialize animation states
     await this.animation.init();
@@ -88,118 +66,101 @@ class Player {
     this.animation.play('idle', true);
   }
 
+  // In Player.js - modify the draw method
   draw(c) {
-      if (this.isInvincible && !this.isVisible) return;
-      
-      // Save context state
-      c.save();
-      
-      // Disable smoothing for pixel art
-      c.imageSmoothingEnabled = false;
-      
-      // Calculate scaled position
-      const drawX = (this.x + this.width / 2) * cameraController.scale;
-      const drawY = (this.y + this.height) * cameraController.scale;
-      
-      // Draw animation with proper scaling
-      this.animation.draw(c, drawX, drawY);
-      
-      // DEBUG: Draw collision box (scaled)
-      c.fillStyle = 'rgba(255, 0, 0, 0.3)';
-      c.fillRect(
-          (this.x + this.collisionOffset.x) * cameraController.scale,
-          (this.y + this.collisionOffset.y) * cameraController.scale,
-          this.collisionSize.width * cameraController.scale,
-          this.collisionSize.height * cameraController.scale
-      );
-      
-      // Restore context
-      c.restore();
+    if (this.isInvincible && !this.isVisible) return;
     
+    // Apply scale to player position
+    const scale = cameraController.scale;
+    const drawX = (this.x + this.width / 2) * scale;  // Center of player
+    const drawY = (this.y + this.height) * scale;     // Bottom of player
+    
+    // Draw animation centered horizontally and aligned at feet
+    this.animation.draw(c, drawX, drawY);
+
+    // DEBUG: Uncomment if needed for debugging
     /*
-    // DEBUG: Draw collision box
+    // Draw collision box (scaled)
     c.fillStyle = 'rgba(255, 0, 0, 0.3)';
     c.fillRect(
-      this.x + this.collisionOffset.x,
-      this.y + this.collisionOffset.y,
-      this.collisionSize.width,
-      this.collisionSize.height
+      (this.x + this.collisionOffset.x) * scale,
+      (this.y + this.collisionOffset.y) * scale,
+      this.collisionSize.width * scale,
+      this.collisionSize.height * scale
     );
 
-    // DEBUG: Draw feet position
+    // Draw feet position (scaled)
     c.fillStyle = 'blue';
     c.fillRect(
-      this.x + this.collisionOffset.x + this.collisionSize.width/2 - 2,
-      this.y + this.collisionOffset.y + this.collisionSize.height - 2,
-      4, 4
+      (this.x + this.collisionOffset.x + this.collisionSize.width/2 - 2) * scale,
+      (this.y + this.collisionOffset.y + this.collisionSize.height - 2) * scale,
+      4 * scale, 4 * scale
     );
 
-    // DEBUG: Draw center point
+    // Draw center point (scaled)
     c.fillStyle = 'green';
     c.fillRect(
-      this.x + this.width/2 - 2,
-      this.y + this.height/2 - 2,
-      4, 4
+      (this.x + this.width/2 - 2) * scale,
+      (this.y + this.height/2 - 2) * scale,
+      4 * scale, 4 * scale
     );
     
     c.fillStyle = 'white';
-    c.font = '12px Arial';
-    c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20, 30);
-    c.fillText(`Velocity Y: ${this.velocity.y.toFixed(1)}`, 20, 50);
+    c.font = `${12 * scale}px Arial`;
+    c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20 * scale, 30 * scale);
+    c.fillText(`Velocity Y: ${this.velocity.y.toFixed(1)}`, 20 * scale, 50 * scale);
     */
-    
   }
 
+
   update(deltaTime, collisionBlocks, platforms) {
-      if (!deltaTime) return;
+    if (!deltaTime) return;
 
-      if (!this.isOnGround) {
-          console.log("Current fall distance:", this.y - this.fallStartY, 
-                    "Threshold:", this.height * FALL_DAMAGE_HEIGHT);
+    if (!this.isOnGround) {
+      console.log("Current fall distance:", this.y - this.fallStartY, 
+                "Threshold:", this.height * FALL_DAMAGE_HEIGHT);
+    }
+    // Update animation first
+    this.animation.update(deltaTime);
+
+    // Update invincibility state
+    this.updateInvincibility(deltaTime);
+
+    // Store previous grounded state for fall tracking
+    const wasOnGround = this.isOnGround;
+    this.isOnGround = false; // Reset each frame
+
+    // Apply gravity if not grounded
+    if (!this.isOnGround) {
+      this.applyGravity(deltaTime);
+      if (this.velocity.y > 500) this.velocity.y = 500; // Terminal velocity
+    }
+
+    // Only process movement if not in death state
+    if (this.movementState !== 'death') {
+      // Update fall tracking
+      this.updateFallTracking();
+      
+      // Handle input if not locked
+      if (!this.inputLocked) {
+        this.handleInput(keys);
       }
-      // Update animation first
-      this.animation.update(deltaTime);
 
-      // Update invincibility state
-      this.updateInvincibility(deltaTime);
+      // Update horizontal position first
+      this.x += this.velocity.x * deltaTime;
 
-      // Store previous grounded state for fall tracking
-      const wasOnGround = this.isOnGround;
-      this.isOnGround = false; // Reset each frame
+      // Update vertical position
+      this.y += this.velocity.y * deltaTime;
 
-      // Apply gravity if not grounded
-      if (!this.isOnGround) {
-          this.applyGravity(deltaTime);
-          if (this.velocity.y > 500) this.velocity.y = 500; // Terminal velocity
+      // Check platform collisions
+      this.checkPlatformCollisions(platforms, deltaTime);
+      if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        this.checkSpikeCollisions(layersData.l_Spikes);
       }
 
-      // Only process movement if not in death state
-      if (this.movementState !== 'death') {
-          // Update fall tracking
-          this.updateFallTracking();
-          
-          // Handle input if not locked
-          if (!this.inputLocked) {
-              this.handleInput(keys);
-          }
-
-          // Update horizontal position first
-          this.x += this.velocity.x * deltaTime;
-
-          // Update vertical position
-          this.y += this.velocity.y * deltaTime;
-
-          // Check platform collisions
-          const platformCollisionOccurred = this.checkPlatformCollisions(platforms, deltaTime);
-          
-          // Only check spikes if no platform collision occurred
-          if (!platformCollisionOccurred && gameStateManager.currentState === gameStateManager.states.PLAYING) {
-              this.checkSpikeCollisions(layersData.l_Spikes);
-          }
-
-          // Update movement state - must be last!
-          this.updateMovementState(wasOnGround);
-      }
+      // Update movement state - must be last!
+      this.updateMovementState(wasOnGround);
+    }
   }
 
 
@@ -523,122 +484,105 @@ class Player {
   }
 
   checkPlatformCollisions(platforms, deltaTime) {
-      const buffer = 0.0001;
-      
-      // Only check if moving downward or stationary
-      if (this.velocity.y <= 0) return false;
+    const buffer = 0.0001;
+    
+    // Only check if moving downward or stationary
+    if (this.velocity.y <= 0) return;
 
-      const collisionBox = {
-          x: this.x + this.collisionOffset.x,
-          y: this.y + this.collisionOffset.y,
-          width: this.collisionSize.width,
-          height: this.collisionSize.height
-      };
+    const collisionBox = {
+      x: this.x + this.collisionOffset.x,
+      y: this.y + this.collisionOffset.y,
+      width: this.collisionSize.width,
+      height: this.collisionSize.height
+    };
 
-      for (let platform of platforms) {
-          if (this.isCollidingWithPlatform(collisionBox, platform, deltaTime)) {
-              this.velocity.y = 0;
-              this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
-              this.isOnGround = true;
-              this.canJump = true;
-              this.inputLocked = false;
-              return true;
-          }
+    for (let platform of platforms) {
+      if (platform.checkCollision(this, deltaTime)) {
+        this.velocity.y = 0;
+        this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
+        this.isOnGround = true;
+        this.canJump = true;
+        this.inputLocked = false;
+        break; // Only need one platform collision
       }
-      return false;
+    }
   }
 
-  isCollidingWithPlatform(collisionBox, platform, deltaTime) {
-      return (
-          collisionBox.x < platform.x + platform.width &&
-          collisionBox.x + collisionBox.width > platform.x &&
-          collisionBox.y < platform.y + platform.height &&
-          collisionBox.y + collisionBox.height > platform.y &&
-          // Only collide from above
-          this.velocity.y > 0 &&
-          collisionBox.y + collisionBox.height - this.velocity.y * deltaTime <= platform.y
-      );
+
+  isColliding(rect1, rect2) {
+    return (
+      rect1.x < rect2.x + rect2.width &&
+      rect1.x + rect1.width > rect2.x &&
+      rect1.y < rect2.y + rect2.height &&
+      rect1.y + rect1.height > rect2.y
+    );
   }
+
   
   // Check item collisions
   checkItemCollisions(itemLayer, itemType) {
-      const tileSize = 16 * cameraController.scale; // Scale tile size
-      
-      // Check multiple points for better collision detection
-      const checkPoints = [
-          { x: (this.x + this.width/2) * cameraController.scale, 
-            y: (this.y + this.height/2) * cameraController.scale }, // Center
-          { x: this.x * cameraController.scale, 
-            y: this.y * cameraController.scale }, // Top-left
-          { x: (this.x + this.width) * cameraController.scale, 
-            y: this.y * cameraController.scale } // Top-right
-      ];
+    const tileSize = 16;
+    // Check multiple points for better collision detection
+    const checkPoints = [
+      { x: this.x + this.width/2, y: this.y + this.height/2 }, // Center
+      { x: this.x, y: this.y }, // Top-left
+      { x: this.x + this.width, y: this.y } // Top-right
+    ];
 
-      for (let point of checkPoints) {
-          const tileX = Math.floor(point.x / tileSize);
-          const tileY = Math.floor(point.y / tileSize);
-          
-          if (tileY >= 0 && tileY < itemLayer.length &&
-              tileX >= 0 && tileX < itemLayer[tileY].length &&
-              itemLayer[tileY][tileX] === 1) {
-              
-              if (!gameStateManager.isItemCollected(itemType, tileX, tileY)) {
-                  if (itemType === 'coin') gameStateManager.addCoin();
-                  if (itemType === 'can') gameStateManager.addCan();
-                  gameStateManager.markItemCollected(itemType, tileX, tileY);
-                  itemLayer[tileY][tileX] = 0;
-                  break;
-              }
-          }
+    for (let point of checkPoints) {
+      const tileX = Math.floor(point.x / tileSize);
+      const tileY = Math.floor(point.y / tileSize);
+      
+      if (tileY >= 0 && tileY < itemLayer.length &&
+          tileX >= 0 && tileX < itemLayer[tileY].length &&
+          itemLayer[tileY][tileX] === 1) {
+        
+        if (!gameStateManager.isItemCollected(itemType, tileX, tileY)) {
+          if (itemType === 'coin') gameStateManager.addCoin();
+          if (itemType === 'can') gameStateManager.addCan();
+          gameStateManager.markItemCollected(itemType, tileX, tileY);
+          itemLayer[tileY][tileX] = 0;
+          break; // Only collect once per frame
+        }
       }
+    }
   }
-    
+  
+  // Check for collision with spikes
   checkSpikeCollisions(spikesLayer) {
-      if (this.isInvincible) return;
-      
-      const tileSize = 16 * cameraController.scale; // Scale tile size
-      
-      // Check multiple points around the player's collision box
-      const checkPoints = [
-          // Bottom points (feet)
-          { 
-              x: (this.x + this.collisionOffset.x + this.collisionSize.width/2) * cameraController.scale, 
-              y: (this.y + this.collisionOffset.y + this.collisionSize.height) * cameraController.scale 
-          },
-          // Top points (head)
-          { 
-              x: (this.x + this.collisionOffset.x + this.collisionSize.width/2) * cameraController.scale, 
-              y: (this.y + this.collisionOffset.y) * cameraController.scale 
-          },
-          // Left side
-          { 
-              x: (this.x + this.collisionOffset.x) * cameraController.scale, 
-              y: (this.y + this.collisionOffset.y + this.collisionSize.height/2) * cameraController.scale 
-          },
-          // Right side
-          { 
-              x: (this.x + this.collisionOffset.x + this.collisionSize.width) * cameraController.scale, 
-              y: (this.y + this.collisionOffset.y + this.collisionSize.height/2) * cameraController.scale 
-          }
-      ];
+    if (this.isInvincible) return; // Skip if invincible
+    
+    const tileSize = 16;
+    // Check multiple points around the player's collision box
+    const checkPoints = [
+      // Bottom points (feet)
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y + this.collisionSize.height },
+      // Top points (head)
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y },
+      // Left side
+      { x: this.x + this.collisionOffset.x, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 },
+      // Right side
+      { x: this.x + this.collisionOffset.x + this.collisionSize.width, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 }
+    ];
 
-      // Spike tile IDs
-      const spikeTiles = [7, 8, 87, 88];
+    // Spike tile IDs
+    const spikeTiles = [7, 8, 87, 88];
+    
+    for (let point of checkPoints) {
+      const tileX = Math.floor(point.x / tileSize);
+      const tileY = Math.floor(point.y / tileSize);
       
-      for (let point of checkPoints) {
-          const tileX = Math.floor(point.x / tileSize);
-          const tileY = Math.floor(point.y / tileSize);
-          
-          if (
-              tileY >= 0 && tileY < spikesLayer.length &&
-              tileX >= 0 && tileX < spikesLayer[tileY].length &&
-              spikeTiles.includes(spikesLayer[tileY][tileX])
-          ) {
-              this.takeDamage();
-              break;
-          }
+      if (
+        tileY >= 0 && tileY < spikesLayer.length &&
+        tileX >= 0 && tileX < spikesLayer[tileY].length &&
+        spikeTiles.includes(spikesLayer[tileY][tileX])
+      ) {
+        this.takeDamage();
+        break; // Only take damage once per check
       }
+    }
   }
+  
   // Check if player has reached level complete zone
   checkLevelComplete(completionZone) {
     // Note: The completion zone should be defined in your game code

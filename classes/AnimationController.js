@@ -118,47 +118,45 @@ class AnimationController {
   }
     
       
-draw(context, x, y) {
-  if (!this.initialized || !this.currentAnimation) return;
-  
-  const animation = this.animations[this.currentAnimation];
-  if (!animation) return;
-  
-  const frame = animation.frames[this.currentFrame];
-  
-  context.save();
-  context.imageSmoothingEnabled = false; // Disable anti-aliasing
-  
-  // Calculate draw position (center-bottom aligned)
-  const drawX = x - (animation.frameWidth * player.scale) / 2;
-  const drawY = y - (animation.frameHeight * player.scale);
-  
-  if (this.flipped) {
-    // For left-facing sprites
-    context.translate(drawX + (animation.frameWidth * player.scale), drawY);
-    context.scale(-1, 1);
-    context.drawImage(
-      animation.spriteSheet,
-      frame.x, frame.y, 
-      frame.width, frame.height,
-      0, 0,
-      frame.width * player.scale, 
-      frame.height * player.scale
-    );
-  } else {
-    // For right-facing sprites (default)
-    context.drawImage(
-      animation.spriteSheet,
-      frame.x, frame.y, 
-      frame.width, frame.height,
-      drawX, drawY,
-      frame.width * player.scale, 
-      frame.height * player.scale
-    );
+  draw(context, x, y) {
+    if (!this.initialized || !this.currentAnimation) return;
+    
+    const animation = this.animations[this.currentAnimation];
+    if (!animation) return;
+    
+    const frame = animation.frames[this.currentFrame];
+    const scale = cameraController.scale;
+    
+    context.save();
+    
+    // Calculate draw position (center-bottom aligned)
+    const drawX = x - (animation.frameWidth * scale) / 2; // Center horizontally
+    const drawY = y - (animation.frameHeight * scale);    // Align bottom
+    
+    if (this.flipped) {
+      // For left-facing sprites
+      context.translate(drawX + animation.frameWidth * scale, drawY);
+      context.scale(-1, 1);
+      context.drawImage(
+        animation.spriteSheet,
+        frame.x, frame.y, 
+        frame.width, frame.height,
+        0, 0,
+        frame.width * scale, frame.height * scale
+      );
+    } else {
+      // For right-facing sprites (default)
+      context.drawImage(
+        animation.spriteSheet,
+        frame.x, frame.y, 
+        frame.width, frame.height,
+        drawX, drawY,
+        frame.width * scale, frame.height * scale
+      );
+    }
+    
+    context.restore();
   }
-  
-  context.restore();
-}
 
 
   // Set the horizontal flip state based on direction

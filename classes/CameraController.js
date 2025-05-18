@@ -29,25 +29,22 @@ class CameraController {
   }
   
   update(player) {
-      // Calculate target position (where the camera wants to be)
-      let targetX = player.x * this.scale - this.centerX;
-      let targetY = player.y * this.scale - this.centerY;
-      
-      // Apply smoothing using lerp
-      if (this.smoothing > 0) {
-          this.x += (targetX - this.x) * (1 - this.smoothing);
-          this.y += (targetY - this.y) * (1 - this.smoothing);
-      } else {
-          this.x = targetX;
-          this.y = targetY;
-      }
-      
-      // Clamp to map bounds with proper scaling
-      const maxX = (this.mapWidth * this.scale) - this.width;
-      const maxY = (this.mapHeight * this.scale) - this.height;
-      
-      this.x = Math.max(0, Math.min(this.x, maxX));
-      this.y = Math.max(0, Math.min(this.y, maxY));
+    // Calculate target position (where the camera wants to be)
+    let targetX = player.x * this.scale - this.centerX;
+    let targetY = player.y * this.scale - this.centerY;
+    
+    // Apply smoothing using lerp
+    if (this.smoothing > 0) {
+      this.x += (targetX - this.x) * (1 - this.smoothing);
+      this.y += (targetY - this.y) * (1 - this.smoothing);
+    } else {
+      this.x = targetX;
+      this.y = targetY;
+    }
+    
+    // Clamp to map bounds
+    this.x = Math.max(0, Math.min(this.x, this.mapWidth - this.width));
+    this.y = Math.max(0, Math.min(this.y, this.mapHeight - this.height));
   }
   
   // Apply camera transformation to context
@@ -87,4 +84,3 @@ class CameraController {
     );
   }
 }
-
