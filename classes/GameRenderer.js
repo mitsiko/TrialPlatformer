@@ -1,4 +1,4 @@
-// GameRenderer.js - Handles rendering game states and UI
+// ./classes/GameRenderer.js - Handles rendering game states and UI
 class GameRenderer {
   constructor() {
     this.offscreenCanvas = null;

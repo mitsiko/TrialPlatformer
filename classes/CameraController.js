@@ -1,3 +1,5 @@
+// ./classes/CameraController.js
+
 class CameraController {
   constructor(canvas, dpr) {
     this.x = 0;
@@ -5,9 +7,9 @@ class CameraController {
     this.width = canvas.width / dpr;
     this.height = canvas.height / dpr;
     
-    // Camera center threshold values
-    this.centerX = 320; // Horizontal center threshold
-    this.centerY = 170; // Vertical center threshold
+    // Camera center threshold values (adjust these as needed)
+    this.centerX = this.width / 2; // Center horizontally
+    this.centerY = this.height / 2; // Center vertically
     
     // Map bounds (should be set after map is loaded)
     this.mapWidth = 0;
@@ -15,17 +17,21 @@ class CameraController {
     
     // Smoothing factor (0 = instant, 1 = no movement)
     this.smoothing = 0.1;
+    
+    // Store scale factor
+    this.scale = 1;
   }
   
-  init(mapWidth, mapHeight) {
+  init(mapWidth, mapHeight, scale = 1) {
     this.mapWidth = mapWidth;
     this.mapHeight = mapHeight;
+    this.scale = scale;
   }
   
   update(player) {
     // Calculate target position (where the camera wants to be)
-    let targetX = player.x - this.centerX;
-    let targetY = player.y - this.centerY;
+    let targetX = player.x * this.scale - this.centerX;
+    let targetY = player.y * this.scale - this.centerY;
     
     // Apply smoothing using lerp
     if (this.smoothing > 0) {

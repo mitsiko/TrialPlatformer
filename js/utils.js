@@ -1,3 +1,5 @@
+// ./js/utils.js
+
 const loadImage = (src) => {
   return new Promise((resolve, reject) => {
     const img = new Image()

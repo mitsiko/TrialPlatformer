@@ -13,15 +13,18 @@
             vertical-align: baseline;
         }
         body {
-            background: black;
+            background: #1a261f;
             margin: 0;
             overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
         }
         canvas {
-            width: 1024px;
-            height: 576px;
+            image-rendering: crisp-edges;
             image-rendering: pixelated;
-            display: block;
         }
     </style>
 </head>
@@ -69,5 +72,6 @@
     <!-- Main Game Code -->
     <script src="./js/eventListeners.js"></script>
     <script src="./js/index.js"></script>
+
 </body>
 </html>

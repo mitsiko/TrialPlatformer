@@ -1,11 +1,12 @@
+// ./js/index.js
 // Get canvas and context
 const canvas = document.getElementById('gameCanvas');
 const c = canvas.getContext('2d');
 const dpr = window.devicePixelRatio || 1;
 
 // Set canvas size
-canvas.width = 1024 * dpr;
-canvas.height = 576 * dpr;
+canvas.width = 1184* dpr;
+canvas.height = 736 * dpr;
 
 // Initialize core systems
 const timeManager = new TimeManager();
@@ -98,7 +99,7 @@ collisions.forEach((row, y) => {
   })
 })
 
-const renderLayer = (tilesData, tilesetImage, tileSize, context) => {
+const renderLayer = (tilesData, tilesetImage, tileSize, context, scale = 1) => {
   const tilesPerRow = Math.ceil(tilesetImage.width / tileSize)
   tilesData.forEach((row, y) => {
     row.forEach((symbol, x) => {
@@ -110,8 +111,8 @@ const renderLayer = (tilesData, tilesetImage, tileSize, context) => {
           tilesetImage,
           srcX, srcY,
           tileSize, tileSize,
-          x * 16, y * 16,
-          16, 16
+          x * 16 * scale, y * 16 * scale,
+          16 * scale, 16 * scale
         )
       }
     })
@@ -120,8 +121,10 @@ const renderLayer = (tilesData, tilesetImage, tileSize, context) => {
 
 const renderStaticLayers = async () => {
   const offscreenCanvas = document.createElement('canvas')
-  offscreenCanvas.width = canvas.width
-  offscreenCanvas.height = canvas.height
+  // Calculate scale factor based on canvas height (691.2px) and map height (352px)
+  const scale = canvas.height / (layersData.l_Collisions.length * 16)
+  offscreenCanvas.width = layersData.l_Collisions[0].length * 16 * scale
+  offscreenCanvas.height = canvas.height // Match canvas height
   const offscreenContext = offscreenCanvas.getContext('2d')
 
   for (const [layerName, tilesData] of Object.entries(layersData)) {
@@ -129,13 +132,16 @@ const renderStaticLayers = async () => {
     if (tilesetInfo) {
       try {
         const tilesetImage = await loadImage(tilesetInfo.imageUrl)
-        renderLayer(tilesData, tilesetImage, tilesetInfo.tileSize, offscreenContext)
+        renderLayer(tilesData, tilesetImage, tilesetInfo.tileSize, offscreenContext, scale)
       } catch (error) {
         console.error(`Failed to load image for layer ${layerName}:`, error)
       }
     }
   }
-  return offscreenCanvas
+  return {
+    canvas: offscreenCanvas,
+    scale: scale
+  };
 }
 
 // Initialize player (keep your existing initialization)
@@ -214,16 +220,16 @@ const startGame = async () => {
     ]);
     
     console.log('Loading map...');
-    const backgroundCanvas = await renderStaticLayers();
+    const { canvas: backgroundCanvas, scale } = await renderStaticLayers();
     if (!backgroundCanvas) {
       console.error('Failed to create background canvas');
       return;
     }
 
-    // Initialize camera with map bounds
-    const mapWidth = layersData.l_Collisions[0].length * 16;
-    const mapHeight = layersData.l_Collisions.length * 16;
-    cameraController.init(mapWidth, mapHeight);
+    // Initialize camera with map bounds (using scaled dimensions)
+    const mapWidth = layersData.l_Collisions[0].length * 16 * scale;
+    const mapHeight = canvas.height; // Already scaled
+    cameraController.init(mapWidth, mapHeight, scale);
     
     console.log('Starting game loop...');
     
@@ -252,6 +258,5 @@ const startGame = async () => {
     });
   }
 };
-
 // Start the game
 startGame();

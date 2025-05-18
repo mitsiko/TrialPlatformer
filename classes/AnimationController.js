@@ -1,3 +1,4 @@
+// ./classes/AnimationController.js
 class AnimationController {
   constructor() {
     this.animations = {};

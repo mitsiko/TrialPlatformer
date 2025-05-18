@@ -1,4 +1,4 @@
-// Updated Player.js with animation and movement states
+// ./classes/Player.js
 const X_VELOCITY = 120;       // Reduced from 200 for better control
 const JUMP_POWER = 350;       // Increased from 250 for better feel
 const VERTICAL_HOP_POWER = 300; // Smaller jump for vertical hops
@@ -69,9 +69,10 @@ class Player {
   draw(c) {
     if (this.isInvincible && !this.isVisible) return;
     
-    // Calculate actual draw position (bottom-center of collision box)
-    const drawX = this.x + this.width / 2;  // Center of player
-    const drawY = this.y + this.height;     // Bottom of player
+    // Apply scale to player position
+    const scale = cameraController.scale;
+    const drawX = (this.x + this.width / 2) * scale;  // Center of player
+    const drawY = (this.y + this.height) * scale;     // Bottom of player
     
     // Draw animation centered horizontally and aligned at feet
     this.animation.draw(c, drawX, drawY);

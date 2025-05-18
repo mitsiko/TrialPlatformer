@@ -1,4 +1,4 @@
-// HUD.js - Heads-up display rendering
+// ./classes/HUD.js - Heads-up display rendering
 class HUD {
   constructor() {
     this.lifeIcon = null;
@@ -9,7 +9,7 @@ class HUD {
     
     // Font settings
     this.fontFamily = 'monospace'; // Use monospace as a pixel font alternative
-    this.fontSize = 16;
+    this.fontSize = 32;
     this.fontColor = '#FFFFFF'; // Cream color
   }
   
@@ -56,10 +56,10 @@ class HUD {
   
   drawLives(context) {
     const lives = gameStateManager.lives;
-    const iconSize = 16;
-    const spacing = 8;
-    const startX = 10;
-    const startY = 10;
+    const iconSize = 32;
+    const spacing = 16;
+    const startX = 26;
+    const startY = 26;
     
     for (let i = 0; i < lives; i++) {
       context.drawImage(
@@ -74,9 +74,9 @@ class HUD {
   
   drawCoins(context) {
     const coins = gameStateManager.coins;
-    const iconSize = 16;
-    const startX = 10;
-    const startY = 36; // Below lives
+    const iconSize = 32;
+    const startX = 26;
+    const startY = 74; // Below lives
     
     // Draw coin icon
     context.drawImage(
@@ -93,9 +93,9 @@ class HUD {
   
   drawCans(context) {
     const cans = gameStateManager.cans;
-    const iconSize = 16;
-    const startX = 10;
-    const startY = 62; // Below coins
+    const iconSize = 26;
+    const startX = 31;
+    const startY = 126; // Below coins
     
     // Draw can icon
     context.drawImage(
@@ -112,9 +112,9 @@ class HUD {
   
   drawTimer(context) {
     const timerText = timeManager.getFormattedTime();
-    const iconSize = 16;
-    const startX = canvas.width / dpr - 110;
-    const startY = 10;
+    const iconSize = 28;
+    const startX = canvas.width / dpr - 150;
+    const startY = 26;
     
     // Draw timer icon
     context.drawImage(

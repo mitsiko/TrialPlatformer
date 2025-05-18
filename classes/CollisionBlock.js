@@ -1,3 +1,4 @@
+// ./classes/CollisionBlock.js
 class CollisionBlock {
   constructor({ x, y, size }) {
     this.x = x

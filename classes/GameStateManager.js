@@ -1,4 +1,4 @@
-// GameStateManager.js - Handle game state transitions and logic
+// ./classes/GameStateManager.js - Handle game state transitions and logic
 class GameStateManager {
   constructor() {
     this.states = {
