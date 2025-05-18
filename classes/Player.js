@@ -13,8 +13,11 @@ class Player {
   constructor({ x = 0, y = 0, size = 32, velocity = { x: 0, y: 0 } } = {}) {
     this.x = x;
     this.y = y;
-    this.width = size;
-    this.height = size;  
+    this.baseWidth = size;  // Native width (32px)
+    this.baseHeight = size; // Native height (32px)
+    this.scale = 1;         // Will be set during initialization
+    this.width = this.baseWidth * this.scale;
+    this.height = this.baseHeight * this.scale;
     this.velocity = { x: 0, y: 0 }; // Properly initialize velocity object
     this.isOnGround = false;
     
@@ -56,6 +59,25 @@ class Player {
     console.log("Player initialized");
   }
 
+  setScale(newScale) {
+      this.scale = newScale;
+      this.width = this.baseWidth * this.scale;
+      this.height = this.baseHeight * this.scale;
+      
+      // Scale collision properties proportionally
+      this.collisionOffset = {
+          x: this.baseWidth * 0.25 * this.scale,
+          y: this.baseHeight * 0.1 * this.scale
+      };
+      this.collisionSize = {
+          width: this.baseWidth * 0.4 * this.scale,
+          height: this.baseHeight * 0.9 * this.scale
+      };
+      
+      console.log(`Player scaled to ${this.scale}x. New size: ${this.width}x${this.height}`);
+  }
+
+
   async init() {
     // Initialize animation states
     await this.animation.init();
@@ -67,32 +89,32 @@ class Player {
   }
 
   draw(c) {
-    if (this.isInvincible && !this.isVisible) return;
-    
-    // Apply scale to player position
-    const scale = cameraController.scale;
-    const drawX = (this.x + this.width / 2) * scale;  // Center of player
-    const drawY = (this.y + this.height) * scale;     // Bottom of player
-    
-    // Draw animation centered horizontally and aligned at feet
-    this.animation.draw(c, drawX, drawY);
-
-    if (!this.isOnGround && this.fallStartY) {
-      c.fillStyle = 'rgba(255, 255, 0, 0.5)';
+      if (this.isInvincible && !this.isVisible) return;
+      
+      // Save context state
+      c.save();
+      
+      // Disable smoothing for pixel art
+      c.imageSmoothingEnabled = false;
+      
+      // Calculate scaled position
+      const drawX = (this.x + this.width / 2) * cameraController.scale;
+      const drawY = (this.y + this.height) * cameraController.scale;
+      
+      // Draw animation with proper scaling
+      this.animation.draw(c, drawX, drawY);
+      
+      // DEBUG: Draw collision box (scaled)
+      c.fillStyle = 'rgba(255, 0, 0, 0.3)';
       c.fillRect(
-        this.x - 10, 
-        this.fallStartY, 
-        20, 
-        this.y - this.fallStartY
+          (this.x + this.collisionOffset.x) * cameraController.scale,
+          (this.y + this.collisionOffset.y) * cameraController.scale,
+          this.collisionSize.width * cameraController.scale,
+          this.collisionSize.height * cameraController.scale
       );
       
-      c.fillStyle = 'white';
-      c.fillText(
-        `Fall: ${Math.floor(this.y - this.fallStartY)}px`, 
-        this.x - 30, 
-        this.fallStartY - 10
-      );
-    }
+      // Restore context
+      c.restore();
     
     /*
     // DEBUG: Draw collision box
@@ -129,53 +151,55 @@ class Player {
   }
 
   update(deltaTime, collisionBlocks, platforms) {
-    if (!deltaTime) return;
+      if (!deltaTime) return;
 
-    if (!this.isOnGround) {
-      console.log("Current fall distance:", this.y - this.fallStartY, 
-                "Threshold:", this.height * FALL_DAMAGE_HEIGHT);
-    }
-    // Update animation first
-    this.animation.update(deltaTime);
+      if (!this.isOnGround) {
+          console.log("Current fall distance:", this.y - this.fallStartY, 
+                    "Threshold:", this.height * FALL_DAMAGE_HEIGHT);
+      }
+      // Update animation first
+      this.animation.update(deltaTime);
 
-    // Update invincibility state
-    this.updateInvincibility(deltaTime);
+      // Update invincibility state
+      this.updateInvincibility(deltaTime);
 
-    // Store previous grounded state for fall tracking
-    const wasOnGround = this.isOnGround;
-    this.isOnGround = false; // Reset each frame
+      // Store previous grounded state for fall tracking
+      const wasOnGround = this.isOnGround;
+      this.isOnGround = false; // Reset each frame
 
-    // Apply gravity if not grounded
-    if (!this.isOnGround) {
-      this.applyGravity(deltaTime);
-      if (this.velocity.y > 500) this.velocity.y = 500; // Terminal velocity
-    }
-
-    // Only process movement if not in death state
-    if (this.movementState !== 'death') {
-      // Update fall tracking
-      this.updateFallTracking();
-      
-      // Handle input if not locked
-      if (!this.inputLocked) {
-        this.handleInput(keys);
+      // Apply gravity if not grounded
+      if (!this.isOnGround) {
+          this.applyGravity(deltaTime);
+          if (this.velocity.y > 500) this.velocity.y = 500; // Terminal velocity
       }
 
-      // Update horizontal position first
-      this.x += this.velocity.x * deltaTime;
+      // Only process movement if not in death state
+      if (this.movementState !== 'death') {
+          // Update fall tracking
+          this.updateFallTracking();
+          
+          // Handle input if not locked
+          if (!this.inputLocked) {
+              this.handleInput(keys);
+          }
 
-      // Update vertical position
-      this.y += this.velocity.y * deltaTime;
+          // Update horizontal position first
+          this.x += this.velocity.x * deltaTime;
 
-      // Check platform collisions
-      this.checkPlatformCollisions(platforms, deltaTime);
-      if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
-        this.checkSpikeCollisions(layersData.l_Spikes);
+          // Update vertical position
+          this.y += this.velocity.y * deltaTime;
+
+          // Check platform collisions
+          const platformCollisionOccurred = this.checkPlatformCollisions(platforms, deltaTime);
+          
+          // Only check spikes if no platform collision occurred
+          if (!platformCollisionOccurred && gameStateManager.currentState === gameStateManager.states.PLAYING) {
+              this.checkSpikeCollisions(layersData.l_Spikes);
+          }
+
+          // Update movement state - must be last!
+          this.updateMovementState(wasOnGround);
       }
-
-      // Update movement state - must be last!
-      this.updateMovementState(wasOnGround);
-    }
   }
 
 
@@ -499,105 +523,122 @@ class Player {
   }
 
   checkPlatformCollisions(platforms, deltaTime) {
-    const buffer = 0.0001;
-    
-    // Only check if moving downward or stationary
-    if (this.velocity.y <= 0) return;
+      const buffer = 0.0001;
+      
+      // Only check if moving downward or stationary
+      if (this.velocity.y <= 0) return false;
 
-    const collisionBox = {
-      x: this.x + this.collisionOffset.x,
-      y: this.y + this.collisionOffset.y,
-      width: this.collisionSize.width,
-      height: this.collisionSize.height
-    };
+      const collisionBox = {
+          x: this.x + this.collisionOffset.x,
+          y: this.y + this.collisionOffset.y,
+          width: this.collisionSize.width,
+          height: this.collisionSize.height
+      };
 
-    for (let platform of platforms) {
-      if (platform.checkCollision(this, deltaTime)) {
-        this.velocity.y = 0;
-        this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
-        this.isOnGround = true;
-        this.canJump = true;
-        this.inputLocked = false;
-        break; // Only need one platform collision
+      for (let platform of platforms) {
+          if (this.isCollidingWithPlatform(collisionBox, platform, deltaTime)) {
+              this.velocity.y = 0;
+              this.y = platform.y - this.collisionSize.height - this.collisionOffset.y - buffer;
+              this.isOnGround = true;
+              this.canJump = true;
+              this.inputLocked = false;
+              return true;
+          }
       }
-    }
+      return false;
   }
 
-
-  isColliding(rect1, rect2) {
-    return (
-      rect1.x < rect2.x + rect2.width &&
-      rect1.x + rect1.width > rect2.x &&
-      rect1.y < rect2.y + rect2.height &&
-      rect1.y + rect1.height > rect2.y
-    );
+  isCollidingWithPlatform(collisionBox, platform, deltaTime) {
+      return (
+          collisionBox.x < platform.x + platform.width &&
+          collisionBox.x + collisionBox.width > platform.x &&
+          collisionBox.y < platform.y + platform.height &&
+          collisionBox.y + collisionBox.height > platform.y &&
+          // Only collide from above
+          this.velocity.y > 0 &&
+          collisionBox.y + collisionBox.height - this.velocity.y * deltaTime <= platform.y
+      );
   }
-
   
   // Check item collisions
   checkItemCollisions(itemLayer, itemType) {
-    const tileSize = 16;
-    // Check multiple points for better collision detection
-    const checkPoints = [
-      { x: this.x + this.width/2, y: this.y + this.height/2 }, // Center
-      { x: this.x, y: this.y }, // Top-left
-      { x: this.x + this.width, y: this.y } // Top-right
-    ];
-
-    for (let point of checkPoints) {
-      const tileX = Math.floor(point.x / tileSize);
-      const tileY = Math.floor(point.y / tileSize);
+      const tileSize = 16 * cameraController.scale; // Scale tile size
       
-      if (tileY >= 0 && tileY < itemLayer.length &&
-          tileX >= 0 && tileX < itemLayer[tileY].length &&
-          itemLayer[tileY][tileX] === 1) {
-        
-        if (!gameStateManager.isItemCollected(itemType, tileX, tileY)) {
-          if (itemType === 'coin') gameStateManager.addCoin();
-          if (itemType === 'can') gameStateManager.addCan();
-          gameStateManager.markItemCollected(itemType, tileX, tileY);
-          itemLayer[tileY][tileX] = 0;
-          break; // Only collect once per frame
-        }
+      // Check multiple points for better collision detection
+      const checkPoints = [
+          { x: (this.x + this.width/2) * cameraController.scale, 
+            y: (this.y + this.height/2) * cameraController.scale }, // Center
+          { x: this.x * cameraController.scale, 
+            y: this.y * cameraController.scale }, // Top-left
+          { x: (this.x + this.width) * cameraController.scale, 
+            y: this.y * cameraController.scale } // Top-right
+      ];
+
+      for (let point of checkPoints) {
+          const tileX = Math.floor(point.x / tileSize);
+          const tileY = Math.floor(point.y / tileSize);
+          
+          if (tileY >= 0 && tileY < itemLayer.length &&
+              tileX >= 0 && tileX < itemLayer[tileY].length &&
+              itemLayer[tileY][tileX] === 1) {
+              
+              if (!gameStateManager.isItemCollected(itemType, tileX, tileY)) {
+                  if (itemType === 'coin') gameStateManager.addCoin();
+                  if (itemType === 'can') gameStateManager.addCan();
+                  gameStateManager.markItemCollected(itemType, tileX, tileY);
+                  itemLayer[tileY][tileX] = 0;
+                  break;
+              }
+          }
       }
-    }
   }
-  
-  // Check for collision with spikes
+    
   checkSpikeCollisions(spikesLayer) {
-    if (this.isInvincible) return; // Skip if invincible
-    
-    const tileSize = 16;
-    // Check multiple points around the player's collision box
-    const checkPoints = [
-      // Bottom points (feet)
-      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y + this.collisionSize.height },
-      // Top points (head)
-      { x: this.x + this.collisionOffset.x + this.collisionSize.width/2, y: this.y + this.collisionOffset.y },
-      // Left side
-      { x: this.x + this.collisionOffset.x, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 },
-      // Right side
-      { x: this.x + this.collisionOffset.x + this.collisionSize.width, y: this.y + this.collisionOffset.y + this.collisionSize.height/2 }
-    ];
-
-    // Spike tile IDs
-    const spikeTiles = [7, 8, 87, 88];
-    
-    for (let point of checkPoints) {
-      const tileX = Math.floor(point.x / tileSize);
-      const tileY = Math.floor(point.y / tileSize);
+      if (this.isInvincible) return;
       
-      if (
-        tileY >= 0 && tileY < spikesLayer.length &&
-        tileX >= 0 && tileX < spikesLayer[tileY].length &&
-        spikeTiles.includes(spikesLayer[tileY][tileX])
-      ) {
-        this.takeDamage();
-        break; // Only take damage once per check
+      const tileSize = 16 * cameraController.scale; // Scale tile size
+      
+      // Check multiple points around the player's collision box
+      const checkPoints = [
+          // Bottom points (feet)
+          { 
+              x: (this.x + this.collisionOffset.x + this.collisionSize.width/2) * cameraController.scale, 
+              y: (this.y + this.collisionOffset.y + this.collisionSize.height) * cameraController.scale 
+          },
+          // Top points (head)
+          { 
+              x: (this.x + this.collisionOffset.x + this.collisionSize.width/2) * cameraController.scale, 
+              y: (this.y + this.collisionOffset.y) * cameraController.scale 
+          },
+          // Left side
+          { 
+              x: (this.x + this.collisionOffset.x) * cameraController.scale, 
+              y: (this.y + this.collisionOffset.y + this.collisionSize.height/2) * cameraController.scale 
+          },
+          // Right side
+          { 
+              x: (this.x + this.collisionOffset.x + this.collisionSize.width) * cameraController.scale, 
+              y: (this.y + this.collisionOffset.y + this.collisionSize.height/2) * cameraController.scale 
+          }
+      ];
+
+      // Spike tile IDs
+      const spikeTiles = [7, 8, 87, 88];
+      
+      for (let point of checkPoints) {
+          const tileX = Math.floor(point.x / tileSize);
+          const tileY = Math.floor(point.y / tileSize);
+          
+          if (
+              tileY >= 0 && tileY < spikesLayer.length &&
+              tileX >= 0 && tileX < spikesLayer[tileY].length &&
+              spikeTiles.includes(spikesLayer[tileY][tileX])
+          ) {
+              this.takeDamage();
+              break;
+          }
       }
-    }
   }
-  
   // Check if player has reached level complete zone
   checkLevelComplete(completionZone) {
     // Note: The completion zone should be defined in your game code

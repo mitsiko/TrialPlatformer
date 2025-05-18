@@ -1,11 +1,17 @@
 // ./js/index.js
+
+// Check if scripts loaded
+console.log("Player class defined:", typeof Player !== "undefined");
+console.log("GameStateManager defined:", typeof GameStateManager !== "undefined");
 // Get canvas and context
 const canvas = document.getElementById('gameCanvas');
 const c = canvas.getContext('2d');
 const dpr = window.devicePixelRatio || 1;
 
 // Set canvas size
-canvas.width = 1184* dpr;
+canvas.style.width = '1184px';
+canvas.style.height = '736px';
+canvas.width = 1184 * dpr;
 canvas.height = 736 * dpr;
 
 // Initialize core systems
@@ -68,6 +74,22 @@ const tilesets = {
   l_Cans: { imageUrl: './images/CanSprite.png', tileSize: 16 },
 };
 
+console.log("Game starting...");
+
+// Basic canvas check
+if (!canvas) {
+  console.error("Canvas element not found!");
+} else {
+  console.log("Canvas dimensions:", canvas.width, "x", canvas.height);
+}
+
+// Context check
+if (!c) {
+  console.error("Could not get 2D context!");
+} else {
+  console.log("2D context obtained successfully");
+}
+
 // Tile setup (keep this exactly as is)
 const collisionBlocks = []
 const platforms = []
@@ -100,24 +122,35 @@ collisions.forEach((row, y) => {
 })
 
 const renderLayer = (tilesData, tilesetImage, tileSize, context, scale = 1) => {
-  const tilesPerRow = Math.ceil(tilesetImage.width / tileSize)
+  const tilesPerRow = Math.ceil(tilesetImage.width / tileSize);
+  
+  // Round scale to nearest integer to prevent floating-point artifacts
+  const roundedScale = Math.round(scale);
+  
   tilesData.forEach((row, y) => {
     row.forEach((symbol, x) => {
       if (symbol !== 0) {
-        const tileIndex = symbol - 1
-        const srcX = (tileIndex % tilesPerRow) * tileSize
-        const srcY = Math.floor(tileIndex / tilesPerRow) * tileSize
+        const tileIndex = symbol - 1;
+        const srcX = (tileIndex % tilesPerRow) * tileSize;
+        const srcY = Math.floor(tileIndex / tilesPerRow) * tileSize;
+        
+        // Use integer positions and dimensions
+        const destX = Math.round(x * 16 * roundedScale);
+        const destY = Math.round(y * 16 * roundedScale);
+        const destSize = Math.round(16 * roundedScale);
+        
+        context.imageSmoothingEnabled = false; // Disable anti-aliasing
         context.drawImage(
           tilesetImage,
           srcX, srcY,
           tileSize, tileSize,
-          x * 16 * scale, y * 16 * scale,
-          16 * scale, 16 * scale
-        )
+          destX, destY,
+          destSize, destSize
+        );
       }
-    })
-  })
-}
+    });
+  });
+};
 
 const renderStaticLayers = async () => {
   const offscreenCanvas = document.createElement('canvas')
@@ -160,6 +193,23 @@ const keys = {
 
 // MODIFIED GAME LOOP
 async function animate(backgroundCanvas) {
+  if (!backgroundCanvas) {
+    console.error("Background canvas is null!");
+    
+    // Draw a test pattern
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, canvas.width/2, canvas.height/2);
+    c.fillStyle = '#00ff00';
+    c.fillRect(canvas.width/2, 0, canvas.width/2, canvas.height/2);
+    c.fillStyle = '#0000ff';
+    c.fillRect(0, canvas.height/2, canvas.width/2, canvas.height/2);
+    c.fillStyle = '#ffffff';
+    c.fillRect(canvas.width/2, canvas.height/2, canvas.width/2, canvas.height/2);
+    
+    requestAnimationFrame(() => animate(backgroundCanvas));
+    return;
+  }
+
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000; // Now properly defined
     lastTime = currentTime;
@@ -209,53 +259,70 @@ async function animate(backgroundCanvas) {
 // MODIFIED START FUNCTION
 const startGame = async () => {
   try {
-    console.log('Initializing game systems...');
-    
-    // Initialize systems (no deltaTime needed here)
+    // Add loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.style.position = 'fixed';
+    loadingDiv.style.top = '0';
+    loadingDiv.style.left = '0';
+    loadingDiv.style.width = '100%';
+    loadingDiv.style.height = '100%';
+    loadingDiv.style.backgroundColor = 'black';
+    loadingDiv.style.color = 'white';
+    loadingDiv.style.display = 'flex';
+    loadingDiv.style.flexDirection = 'column';
+    loadingDiv.style.justifyContent = 'center';
+    loadingDiv.style.alignItems = 'center';
+    loadingDiv.style.zIndex = '1000';
+    loadingDiv.innerHTML = '<h1>Loading Game...</h1><div id="loading-progress">Initializing</div>';
+    document.body.appendChild(loadingDiv);
+
+    const updateProgress = (message) => {
+      document.getElementById('loading-progress').textContent = message;
+    };
+
+    updateProgress('Initializing systems...');
     await Promise.all([
       hud.init(),
       soundManager.init(),
       gameStateManager.init(),
-      player.init() // Make sure to initialize player animations
+      player.init()
     ]);
-    
-    console.log('Loading map...');
+
+    updateProgress('Loading map...');
     const { canvas: backgroundCanvas, scale } = await renderStaticLayers();
+    
     if (!backgroundCanvas) {
-      console.error('Failed to create background canvas');
-      return;
+      throw new Error("Failed to create background canvas");
     }
 
-    // Initialize camera with map bounds (using scaled dimensions)
-    const mapWidth = layersData.l_Collisions[0].length * 16 * scale;
-    const mapHeight = canvas.height; // Already scaled
-    cameraController.init(mapWidth, mapHeight, scale);
-    
-    console.log('Starting game loop...');
-    
-    // Initialize time tracking for game loop
-    lastTime = performance.now();
-    
-    // Start game loop
-    animate(backgroundCanvas);
-    
-    // Set initial game state
-    gameStateManager.changeState(gameStateManager.states.INTRO);
+    updateProgress('Initializing player...');
+    player.setScale(scale);
 
-    document.addEventListener('keydown', (e) => {
-        if (gameStateManager.currentState === gameStateManager.states.INTRO) {
-            gameStateManager.changeState(gameStateManager.states.PLAYING);
-            soundManager.playMusic('intro');
-        }
-    });
+    updateProgress('Initializing camera...');
+    const mapWidth = layersData.l_Collisions[0].length * 16 * scale;
+    const mapHeight = canvas.height;
+    cameraController.init(mapWidth, mapHeight, scale);
+
+    updateProgress('Starting game...');
+    lastTime = performance.now();
+    animate(backgroundCanvas);
+
+    // Remove loading indicator after short delay
+    setTimeout(() => {
+      document.body.removeChild(loadingDiv);
+      gameStateManager.changeState(gameStateManager.states.INTRO);
+    }, 500);
     
   } catch (error) {
     console.error('Game initialization failed:', error);
-    // Add more detailed error logging
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack
-    });
+    // Show error to player
+    document.body.innerHTML = `
+      <div style="color: white; background: #333; padding: 20px; font-family: sans-serif;">
+        <h1>Game Failed to Load</h1>
+        <p>${error.message}</p>
+        <p>Please check console for details and refresh</p>
+      </div>
+    `;
   }
 };
 // Start the game
