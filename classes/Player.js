@@ -70,7 +70,7 @@ class Player {
   draw(c) {
     if (this.isInvincible && !this.isVisible) return;
     
-    // Apply scale to player position
+    // Apply scale to player position - match the map scaling
     const scale = cameraController.scale;
     const drawX = (this.x + this.width / 2) * scale;  // Center of player
     const drawY = (this.y + this.height) * scale;     // Bottom of player
@@ -78,39 +78,35 @@ class Player {
     // Draw animation centered horizontally and aligned at feet
     this.animation.draw(c, drawX, drawY);
 
-    // DEBUG: Uncomment if needed for debugging
+    // DEBUG: Uncomment if needed for debugging collision boxes
     /*
     // Draw collision box (scaled)
     c.fillStyle = 'rgba(255, 0, 0, 0.3)';
     c.fillRect(
-      (this.x + this.collisionOffset.x) * scale,
-      (this.y + this.collisionOffset.y) * scale,
-      this.collisionSize.width * scale,
-      this.collisionSize.height * scale
+      Math.floor((this.x + this.collisionOffset.x) * scale),
+      Math.floor((this.y + this.collisionOffset.y) * scale),
+      Math.ceil(this.collisionSize.width * scale),
+      Math.ceil(this.collisionSize.height * scale)
     );
 
     // Draw feet position (scaled)
     c.fillStyle = 'blue';
     c.fillRect(
-      (this.x + this.collisionOffset.x + this.collisionSize.width/2 - 2) * scale,
-      (this.y + this.collisionOffset.y + this.collisionSize.height - 2) * scale,
-      4 * scale, 4 * scale
+      Math.floor((this.x + this.collisionOffset.x + this.collisionSize.width/2 - 2) * scale),
+      Math.floor((this.y + this.collisionOffset.y + this.collisionSize.height - 2) * scale),
+      Math.ceil(4 * scale), Math.ceil(4 * scale)
     );
 
     // Draw center point (scaled)
     c.fillStyle = 'green';
     c.fillRect(
-      (this.x + this.width/2 - 2) * scale,
-      (this.y + this.height/2 - 2) * scale,
-      4 * scale, 4 * scale
+      Math.floor((this.x + this.width/2 - 2) * scale),
+      Math.floor((this.y + this.height/2 - 2) * scale),
+      Math.ceil(4 * scale), Math.ceil(4 * scale)
     );
-    
-    c.fillStyle = 'white';
-    c.font = `${12 * scale}px Arial`;
-    c.fillText(`State: ${this.movementState} | Grounded: ${this.isOnGround}`, 20 * scale, 30 * scale);
-    c.fillText(`Velocity Y: ${this.velocity.y.toFixed(1)}`, 20 * scale, 50 * scale);
     */
   }
+
 
 
   update(deltaTime, collisionBlocks, platforms) {

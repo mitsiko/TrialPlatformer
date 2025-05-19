@@ -1,4 +1,5 @@
-// ./classes/AnimationController.js
+// ./classes/AnimationController.js - MODIFIED draw method
+
 class AnimationController {
   constructor() {
     this.animations = {};
@@ -118,6 +119,7 @@ class AnimationController {
   }
     
       
+ // MODIFIED draw method with improved scaling
   draw(context, x, y) {
     if (!this.initialized || !this.currentAnimation) return;
     
@@ -130,8 +132,9 @@ class AnimationController {
     context.save();
     
     // Calculate draw position (center-bottom aligned)
-    const drawX = x - (animation.frameWidth * scale) / 2; // Center horizontally
-    const drawY = y - (animation.frameHeight * scale);    // Align bottom
+    // Use Math.floor for pixel-perfect positioning
+    const drawX = Math.floor(x - (animation.frameWidth * scale) / 2); // Center horizontally
+    const drawY = Math.floor(y - (animation.frameHeight * scale));    // Align bottom
     
     if (this.flipped) {
       // For left-facing sprites
@@ -142,7 +145,7 @@ class AnimationController {
         frame.x, frame.y, 
         frame.width, frame.height,
         0, 0,
-        frame.width * scale, frame.height * scale
+        Math.ceil(frame.width * scale), Math.ceil(frame.height * scale)
       );
     } else {
       // For right-facing sprites (default)
@@ -151,7 +154,7 @@ class AnimationController {
         frame.x, frame.y, 
         frame.width, frame.height,
         drawX, drawY,
-        frame.width * scale, frame.height * scale
+        Math.ceil(frame.width * scale), Math.ceil(frame.height * scale)
       );
     }
     
@@ -189,3 +192,95 @@ class AnimationController {
     }
   }
 }
+
+// ./classes/CameraController.js - MODIFIED
+
+class CameraController {
+  constructor(canvas, dpr) {
+    this.x = 0;
+    this.y = 0;
+    this.width = canvas.width / dpr;
+    this.height = canvas.height / dpr;
+    
+    // Camera center threshold values
+    this.centerX = 320; // Fixed camera center X position (for player)
+    this.centerY = 170; // Fixed camera center Y position (for player)
+    
+    // Map bounds (should be set after map is loaded)
+    this.mapWidth = 0;
+    this.mapHeight = 0;
+    
+    // Smoothing factor (0 = instant, 1 = no movement)
+    this.smoothing = 0.1;
+    
+    // Store scale factor
+    this.scale = 1;
+  }
+  
+  init(mapWidth, mapHeight, scale = 1) {
+    this.mapWidth = mapWidth;
+    this.mapHeight = mapHeight;
+    this.scale = scale;
+    
+    console.log(`Camera initialized with map size: ${mapWidth}x${mapHeight}, scale: ${scale}`);
+  }
+  
+  update(player) {
+    // Calculate target position (where the camera wants to be)
+    // Apply scale to player position but NOT to the center points
+    let targetX = (player.x * this.scale) - this.centerX;
+    let targetY = (player.y * this.scale) - this.centerY;
+    
+    // Apply smoothing using lerp
+    if (this.smoothing > 0) {
+      this.x += (targetX - this.x) * (1 - this.smoothing);
+      this.y += (targetY - this.y) * (1 - this.smoothing);
+    } else {
+      this.x = targetX;
+      this.y = targetY;
+    }
+    
+    // Ensure camera bounds are integer values to avoid pixel jittering
+    // and clamp to map bounds
+    this.x = Math.floor(Math.max(0, Math.min(this.x, this.mapWidth - this.width)));
+    this.y = Math.floor(Math.max(0, Math.min(this.y, this.mapHeight - this.height)));
+  }
+  
+  // Apply camera transformation to context - no changes needed
+  applyTransform(context) {
+    context.save();
+    context.translate(-Math.floor(this.x), -Math.floor(this.y));
+  }
+  
+  // Restore context transformation - no changes needed
+  resetTransform(context) {
+    context.restore();
+  }
+  
+  // Convert world coordinates to screen coordinates - no changes needed
+  worldToScreen(worldX, worldY) {
+    return {
+      x: worldX - this.x,
+      y: worldY - this.y
+    };
+  }
+  
+  // Convert screen coordinates to world coordinates - no changes needed
+  screenToWorld(screenX, screenY) {
+    return {
+      x: screenX + this.x,
+      y: screenY + this.y
+    };
+  }
+  
+  // Check if a world coordinate is visible on screen - no changes needed
+  isVisible(worldX, worldY, width = 0, height = 0) {
+    return (
+      worldX + width >= this.x &&
+      worldX <= this.x + this.width &&
+      worldY + height >= this.y &&
+      worldY <= this.y + this.height
+    );
+  }
+}
+

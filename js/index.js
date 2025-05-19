@@ -1,12 +1,37 @@
-// ./js/index.js
+// ./js/index.js - MODIFIED SECTION
+
 // Get canvas and context
 const canvas = document.getElementById('gameCanvas');
 const c = canvas.getContext('2d');
 const dpr = window.devicePixelRatio || 1;
 
-// Set canvas size
-canvas.width = 1184* dpr;
-canvas.height = 736 * dpr;
+// Set canvas size - MODIFIED
+// Set canvas size with proper scaling for pixel art
+function setupCanvas() {
+  // Set logical canvas size - dimensions need to maintain 16:9 ratio for best results
+  const CANVAS_WIDTH = 736;
+  const CANVAS_HEIGHT = 448;
+  
+  // Set canvas display size (CSS size)
+  canvas.style.width = `${CANVAS_WIDTH}px`;
+  canvas.style.height = `${CANVAS_HEIGHT}px`;
+  
+  // Set actual canvas size accounting for DPR for crisp pixels
+  canvas.width = CANVAS_WIDTH * dpr;
+  canvas.height = CANVAS_HEIGHT * dpr;
+  
+  // Scale all drawing operations by DPR
+  c.scale(dpr, dpr);
+  
+  // Ensure pixel art rendering is crisp
+  c.imageSmoothingEnabled = false;
+  
+  console.log(`Canvas initialized at ${CANVAS_WIDTH}x${CANVAS_HEIGHT} with DPR ${dpr}`);
+  console.log(`Actual canvas buffer size: ${canvas.width}x${canvas.height}`);
+}
+
+// Call this function to set up the canvas properly
+setupCanvas();
 
 // Initialize core systems
 const timeManager = new TimeManager();
@@ -22,7 +47,7 @@ gameStateManager.onStateChange(gameStateManager.states.PAUSED, () => {
   timeManager.pause();
 });
 
-const cameraController = new CameraController(canvas, dpr); // Updated initialization
+const cameraController = new CameraController(canvas, dpr);
 const hud = new HUD();
 const gameRenderer = new GameRenderer();
 
@@ -37,7 +62,7 @@ gameStateManager.onStateChange(gameStateManager.states.PAUSED, () => {
     soundManager.pauseMusic();
 });
 
-// Initialize your map data (keep this part exactly as is)
+// Initialize your map data (no changes)
 const layersData = {
    l_BackgroundColor: l_BackgroundColor,
    l_Pines1: l_Pines1,
@@ -68,13 +93,12 @@ const tilesets = {
   l_Cans: { imageUrl: './images/CanSprite.png', tileSize: 16 },
 };
 
-// Tile setup (keep this exactly as is)
+// Tile setup (no changes)
 const collisionBlocks = []
 const platforms = []
 const blockSize = 16
 
 let lastTime = performance.now();
-
 
 collisions.forEach((row, y) => {
   row.forEach((symbol, x) => {
@@ -99,10 +123,24 @@ collisions.forEach((row, y) => {
   })
 })
 
+const calculateOptimalScale = (canvasHeight, mapNativeHeight, dpr) => {
+  // Calculate how many times the map should be scaled to fit the canvas height
+  // Adjust for device pixel ratio
+  const viewHeight = canvasHeight / dpr;
+  let scale = viewHeight / mapNativeHeight;
+  
+  // Optionally round to nearest integer scale for perfect pixel rendering
+  // Uncomment if you prefer integer scaling:
+  // scale = Math.max(1, Math.floor(scale));
+  
+  console.log(`Calculated scale: ${scale} (Canvas: ${viewHeight}px, Map: ${mapNativeHeight}px)`);
+  return scale;
+};
+
+// MODIFIED: Updated renderLayer function for pixel-perfect rendering
 const renderLayer = (tilesData, tilesetImage, tileSize, context, scale = 1) => {
   const tilesPerRow = Math.ceil(tilesetImage.width / tileSize);
   
-  // Ensure we're drawing tiles at exact pixel boundaries
   tilesData.forEach((row, y) => {
     row.forEach((symbol, x) => {
       if (symbol !== 0) {
@@ -110,21 +148,23 @@ const renderLayer = (tilesData, tilesetImage, tileSize, context, scale = 1) => {
         const srcX = Math.floor((tileIndex % tilesPerRow) * tileSize);
         const srcY = Math.floor(Math.floor(tileIndex / tilesPerRow) * tileSize);
         
-        // Use Math.floor to ensure we're drawing at exact pixel positions
+        // Use Math.floor for position and Math.ceil for dimensions
+        // This ensures no gaps between tiles when scaled
         context.drawImage(
           tilesetImage,
           srcX, srcY,
           tileSize, tileSize,
           Math.floor(x * tileSize * scale), 
           Math.floor(y * tileSize * scale),
-          Math.floor(tileSize * scale), 
-          Math.floor(tileSize * scale)
+          Math.ceil(tileSize * scale), 
+          Math.ceil(tileSize * scale)
         );
       }
     });
   });
-}
+};
 
+// MODIFIED: Updated renderStaticLayers function for proper map scaling
 const renderStaticLayers = async () => {
   const offscreenCanvas = document.createElement('canvas');
   
@@ -133,21 +173,21 @@ const renderStaticLayers = async () => {
   const mapHeightInTiles = layersData.l_Collisions.length;
   const tileSize = 16; // Your tile size
   
-  // Calculate a whole-number scaling factor to avoid fractional scaling
-  // This ensures pixel-perfect rendering without cracks between tiles
-  const nativeMapHeight = mapHeightInTiles * tileSize; // 352px (22 tiles × 16px)
-  const targetHeight = canvas.height / dpr; // Get the logical canvas height
+  // Calculate the native map dimensions
+  const nativeMapWidth = mapWidthInTiles * tileSize;
+  const nativeMapHeight = mapHeightInTiles * tileSize;
   
-  // Calculate scale as an integer multiple to ensure pixel-perfect scaling
-  // Round to nearest 0.5 to avoid sub-pixel rendering issues
-  const rawScale = targetHeight / nativeMapHeight;
-  const scale = Math.round(rawScale * 2) / 2; // Round to nearest 0.5
+  // Calculate scale based on canvas height for proper vertical fitting
+  const scale = calculateOptimalScale(canvas.height, nativeMapHeight, dpr);
   
-  console.log(`Map scaling: Native size ${nativeMapHeight}px, Canvas height ${targetHeight}px, Scale factor: ${scale}`);
+  console.log(`Map dimensions: ${nativeMapWidth}x${nativeMapHeight}px`);
+  console.log(`Canvas dimensions: ${canvas.width/dpr}x${canvas.height/dpr}px`);
+  console.log(`Applied scale factor: ${scale}`);
   
-  // Set offscreen canvas dimensions using the whole-number scale
-  const scaledWidth = mapWidthInTiles * tileSize * scale;
-  const scaledHeight = mapHeightInTiles * tileSize * scale;
+  // Set offscreen canvas dimensions using the scale - IMPORTANT
+  const scaledWidth = Math.ceil(nativeMapWidth * scale);
+  const scaledHeight = Math.ceil(nativeMapHeight * scale);
+  
   offscreenCanvas.width = scaledWidth;
   offscreenCanvas.height = scaledHeight;
   
@@ -156,25 +196,36 @@ const renderStaticLayers = async () => {
   // Enable crisp pixel art rendering
   offscreenContext.imageSmoothingEnabled = false;
   
+  // Clear the canvas to a background color first
+  offscreenContext.fillStyle = '#87CEEB'; // Light blue sky color
+  offscreenContext.fillRect(0, 0, scaledWidth, scaledHeight);
+  
+  // Track loaded layers for debugging
+  const loadedLayers = [];
+  
+  // Loop through and render all map layers
   for (const [layerName, tilesData] of Object.entries(layersData)) {
     const tilesetInfo = tilesets[layerName];
     if (tilesetInfo) {
       try {
         const tilesetImage = await loadImage(tilesetInfo.imageUrl);
         renderLayer(tilesData, tilesetImage, tilesetInfo.tileSize, offscreenContext, scale);
+        loadedLayers.push(layerName);
       } catch (error) {
         console.error(`Failed to load image for layer ${layerName}:`, error);
       }
     }
   }
   
+  console.log(`Successfully rendered layers: ${loadedLayers.join(', ')}`);
+  
   return {
     canvas: offscreenCanvas,
     scale: scale
   };
-}
+};
 
-// Initialize player (keep your existing initialization)
+// Initialize player
 const player = new Player({
   x: 100,
   y: 100,
@@ -188,81 +239,90 @@ const keys = {
   d: { pressed: false }
 }
 
-// MODIFIED GAME LOOP
+// MODIFIED: Updated animate function with better camera control
 async function animate(backgroundCanvas) {
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
     
-    // Debug log - show game state and player info
-    console.log(`Frame - State: ${gameStateManager.currentState} | ` +
-              `Player: [X:${player.x.toFixed(1)}, Y:${player.y.toFixed(1)}] | ` +
-              `Velocity: [X:${player.velocity.x.toFixed(1)}, Y:${player.velocity.y.toFixed(1)}]`);
-  
-    // Clear canvas
+    // Limit deltaTime to prevent large jumps after tab switching, etc.
+    const cappedDeltaTime = Math.min(deltaTime, 0.1);
+    
+    // Clear canvas with device pixel ratio scaling
     c.clearRect(0, 0, canvas.width, canvas.height);
     
     // Disable image smoothing for crisp pixel art
     c.imageSmoothingEnabled = false;
 
     // Always update these systems regardless of game state
-    timeManager.update(deltaTime);
+    timeManager.update(cappedDeltaTime);
     
     // Only update gameplay elements when in PLAYING state
     if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        // Update camera before player to ensure proper following
         cameraController.update(player);
-        player.handleInput(keys);
-        player.update(deltaTime, collisionBlocks, platforms);
+        
+        // Update player position and state
+        player.update(cappedDeltaTime, collisionBlocks, platforms);
         
         // Check item collisions only when playing
         player.checkItemCollisions(layersData.l_Coins, 'coin');
         player.checkItemCollisions(layersData.l_Cans, 'can');
     }
 
-    // Apply camera transform
+    // Apply camera transform to context
     cameraController.applyTransform(c);
     
-    // Draw background
+    // Draw background map
     c.drawImage(backgroundCanvas, 0, 0);
     
-    // Draw player (always draw, even when paused)
+    // Draw player
     player.draw(c);
     
-    // Reset transform before UI
+    // Reset transform before drawing UI
     cameraController.resetTransform(c);
     
-    // Always draw HUD
+    // Always draw HUD (not affected by camera)
     hud.draw(c);
 
     // Continue the game loop
     requestAnimationFrame(() => animate(backgroundCanvas));
 }
 
-
 // MODIFIED START FUNCTION
 const startGame = async () => {
   try {
     console.log('Initializing game systems...');
     
-    // Initialize systems (no deltaTime needed here)
+    // Initialize systems
     await Promise.all([
       hud.init(),
       soundManager.init(),
       gameStateManager.init(),
-      player.init() // Make sure to initialize player animations
+      player.init()
     ]);
     
     console.log('Loading map...');
+    
+    // Get the map data and scale from renderStaticLayers
     const { canvas: backgroundCanvas, scale } = await renderStaticLayers();
     if (!backgroundCanvas) {
       console.error('Failed to create background canvas');
       return;
     }
 
-    // Initialize camera with map bounds (using scaled dimensions)
-    const mapWidth = layersData.l_Collisions[0].length * 16 * scale;
-    const mapHeight = layersData.l_Collisions.length * 16 * scale;
-    cameraController.init(mapWidth, mapHeight, scale);
+    // Calculate actual map dimensions after scaling
+    const mapWidth = layersData.l_Collisions[0].length * 16;
+    const mapHeight = layersData.l_Collisions.length * 16;
+    const scaledMapWidth = mapWidth * scale;
+    const scaledMapHeight = mapHeight * scale;
+    
+    console.log(`Native map dimensions: ${mapWidth}x${mapHeight}px`);
+    console.log(`Scaled map dimensions: ${scaledMapWidth}x${scaledMapHeight}px`);
+
+    // Initialize camera with the scaled map dimensions
+    // This is crucial for proper boundary clamping
+    cameraController.init(scaledMapWidth, scaledMapHeight, scale);
     
     console.log('Starting game loop...');
     
@@ -282,14 +342,17 @@ const startGame = async () => {
         }
     });
     
+    console.log('Game successfully initialized!');
+    
   } catch (error) {
     console.error('Game initialization failed:', error);
-    // Add more detailed error logging
     console.error('Error details:', {
       message: error.message,
       stack: error.stack
     });
   }
 };
+
+
 // Start the game
 startGame();
