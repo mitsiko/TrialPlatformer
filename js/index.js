@@ -203,10 +203,18 @@ const renderStaticLayers = async () => {
   // Track loaded layers for debugging
   const loadedLayers = [];
   
-  // Loop through and render all map layers
-  for (const [layerName, tilesData] of Object.entries(layersData)) {
+  // Define which layers are static (not collectible)
+  const staticLayers = [
+    'l_BackgroundColor', 'l_Pines1', 'l_Pines2', 'l_Pines3', 'l_Pines4',
+    'l_Platforms1', 'l_Platfroms2', 'l_Spikes', 'l_Collisions', 'l_Grass'
+  ];
+  
+  // Only render static layers to the background canvas
+  for (const layerName of staticLayers) {
+    const tilesData = layersData[layerName];
     const tilesetInfo = tilesets[layerName];
-    if (tilesetInfo) {
+    
+    if (tilesetInfo && tilesData) {
       try {
         const tilesetImage = await loadImage(tilesetInfo.imageUrl);
         renderLayer(tilesData, tilesetImage, tilesetInfo.tileSize, offscreenContext, scale);
@@ -217,13 +225,71 @@ const renderStaticLayers = async () => {
     }
   }
   
-  console.log(`Successfully rendered layers: ${loadedLayers.join(', ')}`);
+  // Now preload images for dynamic layers (coins and cans) for later use
+  const dynamicLayerImages = {};
+  const dynamicLayers = ['l_Coins', 'l_Cans'];
+  
+  for (const layerName of dynamicLayers) {
+    const tilesetInfo = tilesets[layerName];
+    if (tilesetInfo) {
+      try {
+        dynamicLayerImages[layerName] = await loadImage(tilesetInfo.imageUrl);
+      } catch (error) {
+        console.error(`Failed to preload image for dynamic layer ${layerName}:`, error);
+      }
+    }
+  }
+  
+  console.log(`Successfully rendered static layers: ${loadedLayers.join(', ')}`);
+  console.log(`Preloaded dynamic layer images for: ${Object.keys(dynamicLayerImages).join(', ')}`);
   
   return {
     canvas: offscreenCanvas,
-    scale: scale
+    scale,
+    dynamicLayerImages
   };
 };
+
+// New function to render dynamic layers (coins and cans) during animation loop
+const renderDynamicLayers = (context, dynamicLayerImages, scale) => {
+  // Define dynamic layers (collectible items)
+  const dynamicLayers = ['l_Coins', 'l_Cans'];
+  
+  dynamicLayers.forEach(layerName => {
+    const tilesData = layersData[layerName];
+    const tilesetImage = dynamicLayerImages[layerName];
+    const tileSize = tilesets[layerName].tileSize;
+    
+    if (!tilesetImage || !tilesData) return;
+    
+    const tilesPerRow = Math.ceil(tilesetImage.width / tileSize);
+    
+    // For coins and cans, we need to check if they've been collected
+    const itemType = layerName === 'l_Coins' ? 'coin' : 'can';
+    
+    tilesData.forEach((row, y) => {
+      row.forEach((symbol, x) => {
+        // Only render items that haven't been collected
+        if (symbol !== 0 && !gameStateManager.isItemCollected(itemType, x, y)) {
+          const tileIndex = symbol - 1;
+          const srcX = Math.floor((tileIndex % tilesPerRow) * tileSize);
+          const srcY = Math.floor(Math.floor(tileIndex / tilesPerRow) * tileSize);
+          
+          context.drawImage(
+            tilesetImage,
+            srcX, srcY,
+            tileSize, tileSize,
+            Math.floor(x * tileSize * scale), 
+            Math.floor(y * tileSize * scale),
+            Math.ceil(tileSize * scale), 
+            Math.ceil(tileSize * scale)
+          );
+        }
+      });
+    });
+  });
+};
+
 
 // Initialize player
 const player = new Player({
@@ -240,7 +306,8 @@ const keys = {
 }
 
 // MODIFIED: Updated animate function with better camera control
-async function animate(backgroundCanvas) {
+// Modify the animate function to include dynamic layer rendering
+async function animate(backgroundCanvas, dynamicLayerImages) {
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
@@ -273,8 +340,11 @@ async function animate(backgroundCanvas) {
     // Apply camera transform to context
     cameraController.applyTransform(c);
     
-    // Draw background map
+    // Draw static background map
     c.drawImage(backgroundCanvas, 0, 0);
+    
+    // Draw dynamic layers (coins and cans)
+    renderDynamicLayers(c, dynamicLayerImages, cameraController.scale);
     
     // Draw player
     player.draw(c);
@@ -286,10 +356,12 @@ async function animate(backgroundCanvas) {
     hud.draw(c);
 
     // Continue the game loop
-    requestAnimationFrame(() => animate(backgroundCanvas));
+    requestAnimationFrame(() => animate(backgroundCanvas, dynamicLayerImages));
 }
 
+
 // MODIFIED START FUNCTION
+// Modify the startGame function to pass dynamic layer images to animate
 const startGame = async () => {
   try {
     console.log('Initializing game systems...');
@@ -304,8 +376,8 @@ const startGame = async () => {
     
     console.log('Loading map...');
     
-    // Get the map data and scale from renderStaticLayers
-    const { canvas: backgroundCanvas, scale } = await renderStaticLayers();
+    // Get the map data, scale and dynamic images from renderStaticLayers
+    const { canvas: backgroundCanvas, scale, dynamicLayerImages } = await renderStaticLayers();
     if (!backgroundCanvas) {
       console.error('Failed to create background canvas');
       return;
@@ -329,8 +401,8 @@ const startGame = async () => {
     // Initialize time tracking for game loop
     lastTime = performance.now();
     
-    // Start game loop
-    animate(backgroundCanvas);
+    // Start game loop with dynamic layer images
+    animate(backgroundCanvas, dynamicLayerImages);
     
     // Set initial game state
     gameStateManager.changeState(gameStateManager.states.INTRO);
@@ -352,7 +424,6 @@ const startGame = async () => {
     });
   }
 };
-
 
 // Start the game
 startGame();

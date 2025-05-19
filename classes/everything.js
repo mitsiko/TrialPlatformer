@@ -1,195 +1,309 @@
-// ./classes/AnimationController.js - MODIFIED draw method
+// ./classes/CollisionBlock.js
+class CollisionBlock {
+  constructor({ x, y, size }) {
+    this.x = x
+    this.y = y
+    this.width = size
+    this.height = size
+  }
 
-class AnimationController {
+  draw(c) {
+    // Optional: Draw collision blocks for debugging
+    c.fillStyle = 'rgba(255, 0, 0, 0.5)'
+    c.fillRect(this.x, this.y, this.width, this.height)
+  }
+}
+
+// ./classes/GameRenderer.js - Handles rendering game states and UI
+class GameRenderer {
   constructor() {
-    this.animations = {};
-    this.currentAnimation = null;
-    this.currentFrame = 0;
-    this.frameTimer = 0;
-    this.frameDuration = 0.1; // Default: 100ms per frame
-    this.isPlaying = false;
-    this.isLooping = true;
-    this.flipped = false; // For facing direction
-    this.initialized = false;
-    
-    // Animation finished callback
-    this.onAnimationComplete = null;
+    this.offscreenCanvas = null;
+    this.splashImage = null;
   }
   
   async init() {
-    // Load all player animations - Removed landing animation
-    await this.loadAnimation('idle', 'images/idle.png', 1, 32, 32);
-    await this.loadAnimation('running', 'images/running.png', 8, 32, 32);
-    await this.loadAnimation('jumping', 'images/jumping2.png', 4, 40, 40);
-    await this.loadAnimation('falling', 'images/falling.png', 1, 40, 40);
-    await this.loadAnimation('death', 'images/death.png', 1, 32, 32);
-    
-    this.initialized = true;
-    
-    // Start with idle animation
-    this.play('idle', true);
+    // Load splash screen background if needed
+    // this.splashImage = await loadImage('images/splashBackground.png');
   }
   
-  async loadAnimation(name, spriteSheetPath, frameCount, frameWidth, frameHeight) {
-    return new Promise((resolve, reject) => {
-      const spriteSheet = new Image();
-      spriteSheet.onload = () => {
-        this.animations[name] = {
-          spriteSheet,
-          frameCount,
-          frameWidth,
-          frameHeight,
-          frames: []
-        };
+  draw(context, state) {
+    switch (state) {
+      case gameStateManager.states.INTRO:
+        this.drawIntroScreen(context);
+        break;
         
-        // Create array of frame data
-        for (let i = 0; i < frameCount; i++) {
-          this.animations[name].frames.push({
-            x: i * frameWidth,
-            y: 0,
-            width: frameWidth,
-            height: frameHeight
-          });
-        }
+      case gameStateManager.states.PLAYING:
+        // Main gameplay rendering happens in game loop
+        break;
         
-        resolve();
-      };
-      
-      spriteSheet.onerror = () => {
-        console.error(`Failed to load animation: ${name}`);
-        reject();
-      };
-      
-      spriteSheet.src = spriteSheetPath;
-    });
+      case gameStateManager.states.PAUSED:
+        this.drawPausedScreen(context);
+        break;
+        
+      case gameStateManager.states.LEVEL_COMPLETE:
+        this.drawLevelCompleteScreen(context);
+        break;
+        
+      case gameStateManager.states.GAME_OVER:
+        this.drawGameOverScreen(context);
+        break;
+    }
   }
   
-  play(animationName, loop = true, frameRate = 0.1, callback = null) {
-    if (!this.animations[animationName]) {
-      console.error(`Animation not found: ${animationName}`);
-      return;
-    }
-    
-    // Only change animation if it's different or we're forcing a restart
-    if (this.currentAnimation !== animationName || !loop) {
-      console.log(`Playing animation: ${animationName}, loop: ${loop}`);
-      this.currentAnimation = animationName;
-      this.currentFrame = 0;
-      this.frameTimer = 0;
-      this.isPlaying = true;
-      this.isLooping = loop;
-      this.frameDuration = frameRate;
-      
-      // Store callback
-      this.onAnimationComplete = callback || null;
-    }
-  }
-
-
-  update(deltaTime) {
-    if (!this.isPlaying || !this.currentAnimation) return;
-    
-    this.frameTimer += deltaTime;
-    
-    if (this.frameTimer >= this.frameDuration) {
-      this.frameTimer = 0;
-      this.currentFrame++;
-      
-      const animation = this.animations[this.currentAnimation];
-      if (!animation) return;
-      
-      // Animation complete handling
-      if (this.currentFrame >= animation.frameCount) {
-        if (this.isLooping) {
-          this.currentFrame = 0;
-        } else {
-          this.currentFrame = animation.frameCount - 1;
-          this.isPlaying = false;
-          
-          // Execute callback if exists
-          if (this.onAnimationComplete) {
-            const callback = this.onAnimationComplete;
-            // Clear before firing to prevent potential loops
-            this.onAnimationComplete = null;
-            callback();
-          }
-        }
-      }
-    }
-  }
-    
-      
- // MODIFIED draw method with improved scaling
-  draw(context, x, y) {
-    if (!this.initialized || !this.currentAnimation) return;
-    
-    const animation = this.animations[this.currentAnimation];
-    if (!animation) return;
-    
-    const frame = animation.frames[this.currentFrame];
-    const scale = cameraController.scale;
-    
+  drawIntroScreen(context) {
+    // Save current state
     context.save();
     
-    // Calculate draw position (center-bottom aligned)
-    // Use Math.floor for pixel-perfect positioning
-    const drawX = Math.floor(x - (animation.frameWidth * scale) / 2); // Center horizontally
-    const drawY = Math.floor(y - (animation.frameHeight * scale));    // Align bottom
+    // Clear and scale for device pixel ratio
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     
-    if (this.flipped) {
-      // For left-facing sprites
-      context.translate(drawX + animation.frameWidth * scale, drawY);
-      context.scale(-1, 1);
-      context.drawImage(
-        animation.spriteSheet,
-        frame.x, frame.y, 
-        frame.width, frame.height,
-        0, 0,
-        Math.ceil(frame.width * scale), Math.ceil(frame.height * scale)
-      );
-    } else {
-      // For right-facing sprites (default)
-      context.drawImage(
-        animation.spriteSheet,
-        frame.x, frame.y, 
-        frame.width, frame.height,
-        drawX, drawY,
-        Math.ceil(frame.width * scale), Math.ceil(frame.height * scale)
+    // Fill black background
+    context.fillStyle = '#000000';
+    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+    
+    // Draw title text
+    context.fillStyle = '#FFFDD0'; // Cream color
+    context.font = '48px monospace';
+    context.textAlign = 'center';
+    
+    // Draw title
+    context.fillText(
+      'The Leftovers',
+      canvas.width / dpr / 2,
+      canvas.height / dpr / 2
+    );
+    
+    // Draw "Press any key" text (flashing)
+    const stateTime = gameStateManager.getStateTime();
+    if (stateTime > 2 && Math.floor(stateTime * 2) % 2 === 0) {
+      context.font = '24px monospace';
+      context.fillText(
+        'Press any key to continue',
+        canvas.width / dpr / 2,
+        canvas.height / dpr / 2 + 60
       );
     }
     
+    // Restore context state
     context.restore();
   }
-
-
-  // Set the horizontal flip state based on direction
-  setDirection(direction) {
-    // direction: 1 for right, -1 for left
-    this.flipped = direction < 0;
+  
+  drawPausedScreen(context) {
+    // Save current state
+    context.save();
+    
+    // Set transform for UI elements
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Draw semi-transparent overlay
+    context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+    
+    // Draw "Paused" text
+    context.fillStyle = '#FFFDD0'; // Cream color
+    context.font = '48px monospace';
+    context.textAlign = 'center';
+    
+    context.fillText(
+      'Paused',
+      canvas.width / dpr / 2,
+      canvas.height / dpr / 2
+    );
+    
+    // Draw "Press enter to continue" text
+    context.font = '24px monospace';
+    context.fillText(
+      'Press enter to continue',
+      canvas.width / dpr / 2,
+      canvas.height / dpr / 2 + 60
+    );
+    
+    // Restore context state
+    context.restore();
   }
   
-  // Check if an animation has completed (for non-looping animations)
-  // In AnimationController.js - add this method
-  isComplete() {
-    if (!this.currentAnimation || !this.animations[this.currentAnimation]) return false;
+  drawLevelCompleteScreen(context) {
+    // Save current state
+    context.save();
     
-    const animation = this.animations[this.currentAnimation];
-    return !this.isPlaying && this.currentFrame === animation.frameCount - 1;
+    // Clear and scale for device pixel ratio
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Fill black background
+    context.fillStyle = '#000000';
+    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+    
+    // Draw completion text
+    context.fillStyle = '#FFFDD0'; // Cream color
+    context.font = '48px monospace';
+    context.textAlign = 'center';
+    
+    context.fillText(
+      'Level 1 Passed',
+      canvas.width / dpr / 2,
+      canvas.height / dpr / 2
+    );
+    
+    // Restore context state
+    context.restore();
   }
   
-  // Force complete the current animation
-  forceComplete() {
-    if (!this.currentAnimation) return;
+  drawGameOverScreen(context) {
+    // Save current state
+    context.save();
     
-    const animation = this.animations[this.currentAnimation];
-    this.currentFrame = animation.frameCount - 1;
-    this.isPlaying = false;
+    // Clear and scale for device pixel ratio
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     
-    if (this.onAnimationComplete) {
-      const callback = this.onAnimationComplete;
-      this.onAnimationComplete = null;
-      callback();
+    // Fill black background
+    context.fillStyle = '#000000';
+    context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+    
+    // Draw game over text
+    context.fillStyle = '#FFFDD0'; // Cream color
+    context.font = '48px monospace';
+    context.textAlign = 'center';
+    
+    context.fillText(
+      'Game Over',
+      canvas.width / dpr / 2,
+      canvas.height / dpr / 2
+    );
+    
+    // Restore context state
+    context.restore();
+  }
+}
+
+// ./classes/HUD.js - Heads-up display rendering
+class HUD {
+  constructor() {
+    this.lifeIcon = null;
+    this.coinIcon = null;
+    this.canIcon = null;
+    this.timerIcon = null;
+    this.initialized = false;
+    
+    // Font settings
+    this.fontFamily = 'monospace'; // Use monospace as a pixel font alternative
+    this.fontSize = 16;
+    this.fontColor = '#FFFFFF'; // Cream color
+  }
+  
+  async init() {
+    try {
+      // Load HUD icons
+      this.lifeIcon = await loadImage('images/lifeFlag.png');
+      this.coinIcon = await loadImage('images/CoinSprite.png');
+      this.canIcon = await loadImage('images/CanSprite.png');
+      this.timerIcon = await loadImage('images/timerSprite.png');
+      
+      this.initialized = true;
+    } catch (error) {
+      console.error('Failed to load HUD icons:', error);
     }
+  }
+  
+  draw(context) {
+    if (!this.initialized) return;
+    
+    // Save current context state
+    context.save();
+    
+    // Reset transformations to draw directly on screen
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Set font style
+    context.font = `${this.fontSize}px ${this.fontFamily}`;
+    context.fillStyle = this.fontColor;
+    
+    // Draw lives (top-left)
+    this.drawLives(context);
+    
+    // Draw coins and cans counter
+    this.drawCoins(context);
+    this.drawCans(context);
+    
+    // Draw timer (top-right)
+    this.drawTimer(context);
+    
+    // Restore context state
+    context.restore();
+  }
+  
+  drawLives(context) {
+    const lives = gameStateManager.lives;
+    const iconSize = 16;
+    const spacing = 8;
+    const startX = 16;
+    const startY = 16;
+    
+    for (let i = 0; i < lives; i++) {
+      context.drawImage(
+        this.lifeIcon,
+        startX + i * (iconSize + spacing),
+        startY,
+        iconSize,
+        iconSize
+      );
+    }
+  }
+  
+  drawCoins(context) {
+    const coins = gameStateManager.coins;
+    const iconSize = 16;
+    const startX = 16;
+    const startY = 48; // Below lives
+    
+    // Draw coin icon
+    context.drawImage(
+      this.coinIcon,
+      startX,
+      startY,
+      iconSize,
+      iconSize
+    );
+    
+    // Draw coin count
+    context.fillText(`x ${coins}`, startX + iconSize + 5, startY + iconSize - 2);
+  }
+  
+  drawCans(context) {
+    const cans = gameStateManager.cans;
+    const iconSize = 16;
+    const startX = 16;
+    const startY = 72; // Below coins
+    
+    // Draw can icon
+    context.drawImage(
+      this.canIcon,
+      startX,
+      startY,
+      iconSize,
+      iconSize
+    );
+    
+    // Draw can count
+    context.fillText(`x ${cans}`, startX + iconSize + 5, startY + iconSize - 2);
+  }
+  
+  drawTimer(context) {
+    const timerText = timeManager.getFormattedTime();
+    const iconSize = 16;
+    const startX = canvas.width / dpr - 84;
+    const startY = 16;
+    
+    // Draw timer icon
+    context.drawImage(
+      this.timerIcon,
+      startX,
+      startY,
+      iconSize,
+      iconSize
+    );
+    
+    // Draw timer text
+    context.fillText(timerText, startX + iconSize + 5, startY + iconSize - 2);
   }
 }
 
@@ -272,34 +386,6 @@ class Player {
     
     // Draw animation centered horizontally and aligned at feet
     this.animation.draw(c, drawX, drawY);
-
-    // DEBUG: Uncomment if needed for debugging collision boxes
-    /*
-    // Draw collision box (scaled)
-    c.fillStyle = 'rgba(255, 0, 0, 0.3)';
-    c.fillRect(
-      Math.floor((this.x + this.collisionOffset.x) * scale),
-      Math.floor((this.y + this.collisionOffset.y) * scale),
-      Math.ceil(this.collisionSize.width * scale),
-      Math.ceil(this.collisionSize.height * scale)
-    );
-
-    // Draw feet position (scaled)
-    c.fillStyle = 'blue';
-    c.fillRect(
-      Math.floor((this.x + this.collisionOffset.x + this.collisionSize.width/2 - 2) * scale),
-      Math.floor((this.y + this.collisionOffset.y + this.collisionSize.height - 2) * scale),
-      Math.ceil(4 * scale), Math.ceil(4 * scale)
-    );
-
-    // Draw center point (scaled)
-    c.fillStyle = 'green';
-    c.fillRect(
-      Math.floor((this.x + this.width/2 - 2) * scale),
-      Math.floor((this.y + this.height/2 - 2) * scale),
-      Math.ceil(4 * scale), Math.ceil(4 * scale)
-    );
-    */
   }
 
 
@@ -800,9 +886,32 @@ const c = canvas.getContext('2d');
 const dpr = window.devicePixelRatio || 1;
 
 // Set canvas size - MODIFIED
-// Use an explicit size that matches our aspect ratio and is appropriate for our game
-canvas.width = 640 * dpr;  // 1184 = 16 * 74 (74 tiles wide)
-canvas.height = 352 * dpr;  // 736 = 16 * 46 (46 tiles high)
+// Set canvas size with proper scaling for pixel art
+function setupCanvas() {
+  // Set logical canvas size - dimensions need to maintain 16:9 ratio for best results
+  const CANVAS_WIDTH = 736;
+  const CANVAS_HEIGHT = 448;
+  
+  // Set canvas display size (CSS size)
+  canvas.style.width = `${CANVAS_WIDTH}px`;
+  canvas.style.height = `${CANVAS_HEIGHT}px`;
+  
+  // Set actual canvas size accounting for DPR for crisp pixels
+  canvas.width = CANVAS_WIDTH * dpr;
+  canvas.height = CANVAS_HEIGHT * dpr;
+  
+  // Scale all drawing operations by DPR
+  c.scale(dpr, dpr);
+  
+  // Ensure pixel art rendering is crisp
+  c.imageSmoothingEnabled = false;
+  
+  console.log(`Canvas initialized at ${CANVAS_WIDTH}x${CANVAS_HEIGHT} with DPR ${dpr}`);
+  console.log(`Actual canvas buffer size: ${canvas.width}x${canvas.height}`);
+}
+
+// Call this function to set up the canvas properly
+setupCanvas();
 
 // Initialize core systems
 const timeManager = new TimeManager();
@@ -894,6 +1003,20 @@ collisions.forEach((row, y) => {
   })
 })
 
+const calculateOptimalScale = (canvasHeight, mapNativeHeight, dpr) => {
+  // Calculate how many times the map should be scaled to fit the canvas height
+  // Adjust for device pixel ratio
+  const viewHeight = canvasHeight / dpr;
+  let scale = viewHeight / mapNativeHeight;
+  
+  // Optionally round to nearest integer scale for perfect pixel rendering
+  // Uncomment if you prefer integer scaling:
+  // scale = Math.max(1, Math.floor(scale));
+  
+  console.log(`Calculated scale: ${scale} (Canvas: ${viewHeight}px, Map: ${mapNativeHeight}px)`);
+  return scale;
+};
+
 // MODIFIED: Updated renderLayer function for pixel-perfect rendering
 const renderLayer = (tilesData, tilesetImage, tileSize, context, scale = 1) => {
   const tilesPerRow = Math.ceil(tilesetImage.width / tileSize);
@@ -905,7 +1028,8 @@ const renderLayer = (tilesData, tilesetImage, tileSize, context, scale = 1) => {
         const srcX = Math.floor((tileIndex % tilesPerRow) * tileSize);
         const srcY = Math.floor(Math.floor(tileIndex / tilesPerRow) * tileSize);
         
-        // Use integer scaling to avoid seams between tiles
+        // Use Math.floor for position and Math.ceil for dimensions
+        // This ensures no gaps between tiles when scaled
         context.drawImage(
           tilesetImage,
           srcX, srcY,
@@ -918,9 +1042,9 @@ const renderLayer = (tilesData, tilesetImage, tileSize, context, scale = 1) => {
       }
     });
   });
-}
+};
 
-// MODIFIED: Updated renderStaticLayers function
+// MODIFIED: Updated renderStaticLayers function for proper map scaling
 const renderStaticLayers = async () => {
   const offscreenCanvas = document.createElement('canvas');
   
@@ -933,18 +1057,16 @@ const renderStaticLayers = async () => {
   const nativeMapWidth = mapWidthInTiles * tileSize;
   const nativeMapHeight = mapHeightInTiles * tileSize;
   
-  // Fixed scale calculation - use integer scaling for pixel perfection
-  // Calculate scale based on canvas height since map height is more critical
-  const targetHeight = canvas.height / dpr;
-  const scale = targetHeight / nativeMapHeight;
+  // Calculate scale based on canvas height for proper vertical fitting
+  const scale = calculateOptimalScale(canvas.height, nativeMapHeight, dpr);
   
   console.log(`Map dimensions: ${nativeMapWidth}x${nativeMapHeight}px`);
-  console.log(`Canvas dimensions: ${canvas.width/dpr}x${targetHeight}px`);
-  console.log(`Scale factor: ${scale}`);
+  console.log(`Canvas dimensions: ${canvas.width/dpr}x${canvas.height/dpr}px`);
+  console.log(`Applied scale factor: ${scale}`);
   
-  // Set offscreen canvas dimensions using the scale
-  const scaledWidth = nativeMapWidth * scale;
-  const scaledHeight = nativeMapHeight * scale;
+  // Set offscreen canvas dimensions using the scale - IMPORTANT
+  const scaledWidth = Math.ceil(nativeMapWidth * scale);
+  const scaledHeight = Math.ceil(nativeMapHeight * scale);
   
   offscreenCanvas.width = scaledWidth;
   offscreenCanvas.height = scaledHeight;
@@ -958,23 +1080,30 @@ const renderStaticLayers = async () => {
   offscreenContext.fillStyle = '#87CEEB'; // Light blue sky color
   offscreenContext.fillRect(0, 0, scaledWidth, scaledHeight);
   
+  // Track loaded layers for debugging
+  const loadedLayers = [];
+  
+  // Loop through and render all map layers
   for (const [layerName, tilesData] of Object.entries(layersData)) {
     const tilesetInfo = tilesets[layerName];
     if (tilesetInfo) {
       try {
         const tilesetImage = await loadImage(tilesetInfo.imageUrl);
         renderLayer(tilesData, tilesetImage, tilesetInfo.tileSize, offscreenContext, scale);
+        loadedLayers.push(layerName);
       } catch (error) {
         console.error(`Failed to load image for layer ${layerName}:`, error);
       }
     }
   }
   
+  console.log(`Successfully rendered layers: ${loadedLayers.join(', ')}`);
+  
   return {
     canvas: offscreenCanvas,
     scale: scale
   };
-}
+};
 
 // Initialize player
 const player = new Player({
@@ -990,7 +1119,7 @@ const keys = {
   d: { pressed: false }
 }
 
-// MODIFIED GAME LOOP - No significant changes needed here
+// MODIFIED: Updated animate function with better camera control
 async function animate(backgroundCanvas) {
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000;
@@ -999,7 +1128,7 @@ async function animate(backgroundCanvas) {
     // Limit deltaTime to prevent large jumps after tab switching, etc.
     const cappedDeltaTime = Math.min(deltaTime, 0.1);
     
-    // Clear canvas
+    // Clear canvas with device pixel ratio scaling
     c.clearRect(0, 0, canvas.width, canvas.height);
     
     // Disable image smoothing for crisp pixel art
@@ -1010,8 +1139,10 @@ async function animate(backgroundCanvas) {
     
     // Only update gameplay elements when in PLAYING state
     if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        // Update camera before player to ensure proper following
         cameraController.update(player);
-        player.handleInput(keys);
+        
+        // Update player position and state
         player.update(cappedDeltaTime, collisionBlocks, platforms);
         
         // Check item collisions only when playing
@@ -1019,19 +1150,19 @@ async function animate(backgroundCanvas) {
         player.checkItemCollisions(layersData.l_Cans, 'can');
     }
 
-    // Apply camera transform
+    // Apply camera transform to context
     cameraController.applyTransform(c);
     
-    // Draw background
+    // Draw background map
     c.drawImage(backgroundCanvas, 0, 0);
     
     // Draw player
     player.draw(c);
     
-    // Reset transform before UI
+    // Reset transform before drawing UI
     cameraController.resetTransform(c);
     
-    // Always draw HUD
+    // Always draw HUD (not affected by camera)
     hud.draw(c);
 
     // Continue the game loop
@@ -1052,16 +1183,26 @@ const startGame = async () => {
     ]);
     
     console.log('Loading map...');
+    
+    // Get the map data and scale from renderStaticLayers
     const { canvas: backgroundCanvas, scale } = await renderStaticLayers();
     if (!backgroundCanvas) {
       console.error('Failed to create background canvas');
       return;
     }
 
-    // Initialize camera with map bounds (using scaled dimensions)
-    const mapWidth = layersData.l_Collisions[0].length * 16 * scale;
-    const mapHeight = layersData.l_Collisions.length * 16 * scale;
-    cameraController.init(mapWidth, mapHeight, scale);
+    // Calculate actual map dimensions after scaling
+    const mapWidth = layersData.l_Collisions[0].length * 16;
+    const mapHeight = layersData.l_Collisions.length * 16;
+    const scaledMapWidth = mapWidth * scale;
+    const scaledMapHeight = mapHeight * scale;
+    
+    console.log(`Native map dimensions: ${mapWidth}x${mapHeight}px`);
+    console.log(`Scaled map dimensions: ${scaledMapWidth}x${scaledMapHeight}px`);
+
+    // Initialize camera with the scaled map dimensions
+    // This is crucial for proper boundary clamping
+    cameraController.init(scaledMapWidth, scaledMapHeight, scale);
     
     console.log('Starting game loop...');
     
@@ -1081,6 +1222,8 @@ const startGame = async () => {
         }
     });
     
+    console.log('Game successfully initialized!');
+    
   } catch (error) {
     console.error('Game initialization failed:', error);
     console.error('Error details:', {
@@ -1090,10 +1233,12 @@ const startGame = async () => {
   }
 };
 
+
 // Start the game
 startGame();
 
-// ./index.html
+// .index.html
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -1108,30 +1253,50 @@ startGame();
             font: inherit;
             vertical-align: baseline;
         }
-        body {
+        
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
             background: #1a261f;
             margin: 0;
-            overflow: hidden;
+            padding: 0;
+        }
+        
+        body {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            width: 100vw;
         }
+        
+        .game-container {
+            position: relative;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 640 / 352; /* Match your canvas aspect ratio */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
         canvas {
-            /* Maintain the aspect ratio while scaling */
+            /* Size limitations to maintain aspect ratio */
             max-width: 100%;
             max-height: 100%;
-            object-fit: contain;
+            width: auto;
+            height: auto;
             
-            /* Ensure crisp pixel rendering */
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-            image-rendering: -moz-crisp-edges;
-            image-rendering: -webkit-optimize-contrast;
+            /* Ensure the canvas is properly displayed */
+            display: block;
             
-            /* Add border for visibility */
+            /* Border for visibility */
             border: 1px solid #333;
+            
+            /* Critical for pixel art: prevent blurry scaling */
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            -ms-interpolation-mode: nearest-neighbor;
         }
     </style>
 </head>
