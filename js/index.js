@@ -323,7 +323,7 @@ async function animate(backgroundCanvas, dynamicLayerImages) {
     // Disable image smoothing for crisp pixel art
     c.imageSmoothingEnabled = false;
 
-    // Always update these systems regardless of game state
+    // Always update timeManager - it will internally check if it should update based on game state
     timeManager.update(cappedDeltaTime);
     
     // Check for timeup game over condition - only in PLAYING state
@@ -370,7 +370,7 @@ async function animate(backgroundCanvas, dynamicLayerImages) {
         gameRenderer.draw(c, gameStateManager.currentState);
     }
     
-    // Always draw HUD (but HUD class now checks if we're in PLAYING state)
+    // Always draw HUD - the HUD class will internally check if it should display based on game state
     hud.draw(c);
 
     // Continue the game loop
@@ -425,7 +425,6 @@ const startGame = async () => {
     console.log(`Scaled map dimensions: ${scaledMapWidth}x${scaledMapHeight}px`);
 
     // Initialize camera with the scaled map dimensions
-    // This is crucial for proper boundary clamping
     cameraController.init(scaledMapWidth, scaledMapHeight, scale);
     
     console.log('Starting game loop...');
@@ -433,16 +432,25 @@ const startGame = async () => {
     // Initialize time tracking for game loop
     lastTime = performance.now();
     
+    // Set initial game state - ensures timer won't start until state changes to PLAYING
+    gameStateManager.changeState(gameStateManager.states.INTRO);
+    
     // Start game loop with dynamic layer images
     animate(backgroundCanvas, dynamicLayerImages);
     
-    // Set initial game state
-    gameStateManager.changeState(gameStateManager.states.INTRO);
-
+    // Add input handling for starting game from intro
     document.addEventListener('keydown', (e) => {
+        // Handle state changes based on key press
         if (gameStateManager.currentState === gameStateManager.states.INTRO) {
             gameStateManager.changeState(gameStateManager.states.PLAYING);
-            soundManager.playMusic('intro');
+        } else if (gameStateManager.currentState === gameStateManager.states.PAUSED && e.key === 'Enter') {
+            gameStateManager.changeState(gameStateManager.states.PLAYING);
+        } else if (e.key === 'Escape' && gameStateManager.currentState === gameStateManager.states.PLAYING) {
+            gameStateManager.changeState(gameStateManager.states.PAUSED);
+        } else if ((gameStateManager.currentState === gameStateManager.states.LEVEL_COMPLETE || 
+                  gameStateManager.currentState === gameStateManager.states.GAME_OVER) &&
+                  gameStateManager.waitingForKeypress) {
+            gameStateManager.changeState(gameStateManager.states.INTRO);
         }
     });
     

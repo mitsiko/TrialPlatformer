@@ -12,8 +12,12 @@ class TimeManager {
         this.remainingTime = this.levelTime;
     }
 
+    // Replace the current update() method with this improved version:
     update(deltaTime) {
-        if (this.isPaused) return;
+        // Only update time when game is in PLAYING state
+        if (this.isPaused || (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING)) {
+            return;
+        }
         
         this.deltaTime = deltaTime;
         this.gameTime += this.deltaTime;
@@ -24,7 +28,7 @@ class TimeManager {
         // Process callbacks
         this._processCallbacks();
     }
-    
+        
     // Get formatted time as MM:SS
     getFormattedTime() {
         const minutes = Math.floor(this.remainingTime / 60);

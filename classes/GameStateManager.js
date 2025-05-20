@@ -49,6 +49,7 @@ class GameStateManager {
         console.log(`Total coins in map: ${this.totalCoinsInMap}`);
     }
     
+    // Replace the current reset() method with this improved version:
     reset() {
         // Don't directly call changeState here to avoid triggering callbacks before init is complete
         this.currentState = this.states.INTRO;
@@ -60,7 +61,7 @@ class GameStateManager {
         this.cansCollected.clear();
         this.waitingForKeypress = false;
         
-        // Make sure timer is reset
+        // Make sure timer is reset properly
         if (timeManager) {
             timeManager.reset();
         }
@@ -68,6 +69,26 @@ class GameStateManager {
         // Stop any playing music
         if (soundManager) {
             soundManager.stopMusic();
+        }
+        
+        // Reset player position to initial position - MODIFIED TO MATCH YOUR IMPLEMENTATION
+        if (player) {
+            player.x = 100;
+            player.y = 100;
+            player.velocity.x = 0;
+            player.velocity.y = 0;
+            player.movementState = 'idle'; // Changed from player.states.idle
+            player.animation.play('idle', true); // Reset animation
+            player.isInvincible = false;
+            player.invincibilityTimer = 0;
+        }
+        
+        // Reset camera position
+        if (cameraController) {
+            cameraController.x = 0;
+            cameraController.y = 0;
+            cameraController.targetX = 0;
+            cameraController.targetY = 0;
         }
     }
     

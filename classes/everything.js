@@ -1,653 +1,6 @@
-// ./classes/GameStateManager.js - Handle game state transitions and logic
-
-class GameStateManager {
-    constructor() {
-        this.states = {
-            INTRO: 'intro',
-            PLAYING: 'playing',
-            PAUSED: 'paused',
-            LEVEL_COMPLETE: 'levelComplete',
-            GAME_OVER: 'gameOver'
-        };
-        
-        this.currentState = this.states.INTRO;
-        this.stateChangeCallbacks = {};
-        this.stateEnteredTime = 0;
-        this.lives = 3;
-        this.coins = 0;
-        this.cans = 0;
-        this.coinsCollected = new Set();
-        this.cansCollected = new Set();
-    }
-    
-    startGame() {
-        if (this.currentState === this.states.INTRO || 
-            this.currentState === this.states.PAUSED) {
-            this.changeState(this.states.PLAYING);
-        }
-    }
-    
-    init() {
-        this.reset();
-    }
-    
-    reset() {
-        this.changeState(this.states.INTRO);
-    }
-    
-    changeState(newState) {
-        const oldState = this.currentState;
-        this.currentState = newState;
-        this.stateEnteredTime = timeManager.gameTime;
-        
-        if (this.stateChangeCallbacks[newState]) {
-            this.stateChangeCallbacks[newState].forEach(callback => callback(oldState));
-        }
-        
-        switch (newState) {
-            case this.states.INTRO:
-                soundManager.stopMusic();
-                timeManager.reset();
-                this.lives = 3;
-                this.coins = 0;
-                this.cans = 0;
-                this.coinsCollected.clear();
-                this.cansCollected.clear();
-                break;
-                
-            case this.states.PLAYING:
-                timeManager.resume();
-                if (oldState === this.states.INTRO || oldState === this.states.PAUSED) {
-                    soundManager.playMusic('intro');
-                }
-                break;
-                
-            case this.states.PAUSED:
-                soundManager.pauseMusic();
-                timeManager.pause();
-                break;
-                
-            case this.states.LEVEL_COMPLETE:
-                soundManager.playMusic('win');
-                timeManager.setTimeout(() => this.changeState(this.states.INTRO), 3);
-                break;
-                
-            case this.states.GAME_OVER:
-                soundManager.playMusic('gameOver');
-                timeManager.setTimeout(() => this.changeState(this.states.INTRO), 8);
-                break;
-        }
-    }
-    
-    onStateChange(state, callback) {
-        if (!this.stateChangeCallbacks[state]) {
-            this.stateChangeCallbacks[state] = [];
-        }
-        this.stateChangeCallbacks[state].push(callback);
-    }
-    
-    isState(state) {
-        return this.currentState === state;
-    }
-    
-    getStateTime() {
-        return timeManager.gameTime - this.stateEnteredTime;
-    }
-    
-    // Player stats methods
-    addCoin() {
-        this.coins++;
-        soundManager.playSound('coin'); 
-    }
-    
-    addCan() {
-        this.cans++;
-        this.addLife();
-        soundManager.playSound('can');
-    }
-    
-    addLife() {
-        this.lives++;
-    }
-    
-    removeLife() {
-        this.lives--;
-        soundManager.playSound('hurt');
-        
-        if (this.lives <= 0) {
-            this.changeState(this.states.GAME_OVER);
-        }
-        
-        return this.lives;
-    }
-    
-    // Check if item was already collected
-    isItemCollected(type, x, y) {
-        const key = `${x},${y}`;
-        if (type === 'coin') {
-            return this.coinsCollected.has(key);
-        } else if (type === 'can') {
-            return this.cansCollected.has(key);
-        }
-        return false;
-    }
-    
-    // Mark item as collected
-    markItemCollected(type, x, y) {
-        const key = `${x},${y}`;
-        if (type === 'coin') {
-            this.coinsCollected.add(key);
-        } else if (type === 'can') {
-            this.cansCollected.add(key);
-        }
-    }
-}
-
-// ./classes/GameRenderer.js - Handles rendering game states and UI
-
-class GameRenderer {
-    constructor() {
-        this.offscreenCanvas = null;
-        this.splashImage = null;
-    }
-    
-    async init() {
-        // We don't need to load splash images as we're rendering directly
-    }
-    
-    draw(context, state) {
-        switch (state) {
-            case gameStateManager.states.INTRO:
-                this.drawIntroScreen(context);
-                break;
-                
-            case gameStateManager.states.PLAYING:
-                // Main gameplay rendering happens in game loop
-                break;
-                
-            case gameStateManager.states.PAUSED:
-                this.drawPausedScreen(context);
-                break;
-                
-            case gameStateManager.states.LEVEL_COMPLETE:
-                this.drawLevelCompleteScreen(context);
-                break;
-                
-            case gameStateManager.states.GAME_OVER:
-                this.drawGameOverScreen(context);
-                break;
-        }
-    }
-    
-    drawIntroScreen(context) {
-        // Save current state
-        context.save();
-        
-        // Clear and scale for device pixel ratio
-        context.setTransform(dpr, 0, 0, dpr, 0, 0);
-        
-        // Fill black background
-        context.fillStyle = '#1a261f';
-        context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-        
-        // Draw title text
-        context.fillStyle = '#FFFDD0'; // Cream color
-        context.font = '48px monospace';
-        context.textAlign = 'center';
-        
-        // Draw title
-        context.fillText(
-            'The Leftovers',
-            canvas.width / dpr / 2,
-            canvas.height / dpr / 2
-        );
-        
-        // Draw "Press any key" text (flashing)
-        const stateTime = gameStateManager.getStateTime();
-        if (stateTime > 2 && Math.floor(stateTime * 2) % 2 === 0) {
-            context.font = '24px monospace';
-            context.fillText(
-                'Press any key to continue',
-                canvas.width / dpr / 2,
-                canvas.height / dpr / 2 + 60
-            );
-        }
-        
-        // Restore context state
-        context.restore();
-    }
-    
-    drawPausedScreen(context) {
-        // Save current state
-        context.save();
-        
-        // Set transform for UI elements
-        context.setTransform(dpr, 0, 0, dpr, 0, 0);
-        
-        // Draw semi-transparent overlay
-        context.fillStyle = '#1a261f';
-        context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-        
-        // Draw "Paused" text
-        context.fillStyle = '#FFFDD0'; // Cream color
-        context.font = '48px monospace';
-        context.textAlign = 'center';
-        
-        context.fillText(
-            'Paused',
-            canvas.width / dpr / 2,
-            canvas.height / dpr / 2
-        );
-        
-        // Draw "Press enter to continue" text
-        context.font = '24px monospace';
-        context.fillText(
-            'Press enter to continue',
-            canvas.width / dpr / 2,
-            canvas.height / dpr / 2 + 60
-        );
-        
-        // Restore context state
-        context.restore();
-    }
-    
-    drawLevelCompleteScreen(context) {
-        // Save current state
-        context.save();
-        
-        // Clear and scale for device pixel ratio
-        context.setTransform(dpr, 0, 0, dpr, 0, 0);
-        
-        // Fill black background
-        context.fillStyle = '#1a261f';
-        context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-        
-        // Draw completion text
-        context.fillStyle = '#FFFDD0'; // Cream color
-        context.font = '48px monospace';
-        context.textAlign = 'center';
-        
-        context.fillText(
-            'Level 1 Passed',
-            canvas.width / dpr / 2,
-            canvas.height / dpr / 2
-        );
-        
-        // Restore context state
-        context.restore();
-    }
-    
-    drawGameOverScreen(context) {
-        // Save current state
-        context.save();
-        
-        // Clear and scale for device pixel ratio
-        context.setTransform(dpr, 0, 0, dpr, 0, 0);
-        
-        // Fill black background
-        context.fillStyle = '#1a261f';
-        context.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-        
-        // Draw game over text
-        context.fillStyle = '#FFFDD0'; // Cream color
-        context.font = '48px monospace';
-        context.textAlign = 'center';
-        
-        context.fillText(
-            'Game Over',
-            canvas.width / dpr / 2,
-            canvas.height / dpr / 2
-        );
-        
-        // Restore context state
-        context.restore();
-    }
-}
-
-// ./classes/HUD.js - Heads-up display renderin
-
-class HUD {
-  constructor() {
-    this.lifeIcon = null;
-    this.coinIcon = null;
-    this.canIcon = null;
-    this.timerIcon = null;
-    this.initialized = false;
-    
-    // Font settings
-    this.fontFamily = 'monospace'; // Use monospace as a pixel font alternative
-    this.fontSize = 16;
-    this.fontColor = '#FFFFFF'; // Cream color
-  }
-  
-  async init() {
-    try {
-      // Load HUD icons
-      this.lifeIcon = await loadImage('images/lifeFlag.png');
-      this.coinIcon = await loadImage('images/CoinSprite.png');
-      this.canIcon = await loadImage('images/CanSprite.png');
-      this.timerIcon = await loadImage('images/timerSprite.png');
-      
-      this.initialized = true;
-    } catch (error) {
-      console.error('Failed to load HUD icons:', error);
-    }
-  }
-  
-  draw(context) {
-    if (!this.initialized) return;
-    
-    // Save current context state
-    context.save();
-    
-    // Reset transformations to draw directly on screen
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    // Set font style
-    context.font = `${this.fontSize}px ${this.fontFamily}`;
-    context.fillStyle = this.fontColor;
-    
-    // Draw lives (top-left)
-    this.drawLives(context);
-    
-    // Draw coins and cans counter
-    this.drawCoins(context);
-    this.drawCans(context);
-    
-    // Draw timer (top-right)
-    this.drawTimer(context);
-    
-    // Restore context state
-    context.restore();
-  }
-  
-  drawLives(context) {
-    const lives = gameStateManager.lives;
-    const iconSize = 16;
-    const spacing = 8;
-    const startX = 16;
-    const startY = 16;
-    
-    for (let i = 0; i < lives; i++) {
-      context.drawImage(
-        this.lifeIcon,
-        startX + i * (iconSize + spacing),
-        startY,
-        iconSize,
-        iconSize
-      );
-    }
-  }
-  
-  drawCoins(context) {
-    const coins = gameStateManager.coins;
-    const iconSize = 16;
-    const startX = 16;
-    const startY = 48; // Below lives
-    
-    // Draw coin icon
-    context.drawImage(
-      this.coinIcon,
-      startX,
-      startY,
-      iconSize,
-      iconSize
-    );
-    
-    // Draw coin count
-    context.fillText(`x ${coins}`, startX + iconSize + 5, startY + iconSize - 2);
-  }
-  
-  drawCans(context) {
-    const cans = gameStateManager.cans;
-    const iconSize = 16;
-    const startX = 16;
-    const startY = 72; // Below coins
-    
-    // Draw can icon
-    context.drawImage(
-      this.canIcon,
-      startX,
-      startY,
-      iconSize,
-      iconSize
-    );
-    
-    // Draw can count
-    context.fillText(`x ${cans}`, startX + iconSize + 5, startY + iconSize - 2);
-  }
-  
-  drawTimer(context) {
-    const timerText = timeManager.getFormattedTime();
-    const iconSize = 16;
-    const startX = canvas.width / dpr - 84;
-    const startY = 16;
-    
-    // Draw timer icon
-    context.drawImage(
-      this.timerIcon,
-      startX,
-      startY,
-      iconSize,
-      iconSize
-    );
-    
-    // Draw timer text
-    context.fillText(timerText, startX + iconSize + 5, startY + iconSize - 2);
-  }
-}
-
-// ./classes/SoundManager.js - Handle all game sounds and music
-
-class SoundManager {
-  constructor() {
-    this.sounds = {};
-    this.music = {};
-    this.currentMusic = null;
-    this.musicVolume = 0.5;
-    this.soundVolume = 0.7;
-    this.initialized = false;
-  }
-
-  init() {
-    // Load all sounds and music
-    this.loadMusic('intro', 'sounds/mostlyChimesTrimmed.mp3');
-    this.loadMusic('win', 'sounds/winningTrimmed.mp3');
-    this.loadMusic('gameOver', 'sounds/flatliningTrimmed.mp3');
-    
-    // Load sound effects
-    this.loadSound('jump', 'sounds/jumping.mp3');
-    this.loadSound('coin', 'sounds/coinDropTrimmed.mp3');
-    this.loadSound('can', 'sounds/metalTrimmed.mp3');
-    this.loadSound('landing', 'sounds/landingTrimmed.mp3');
-    
-    this.initialized = true;
-  }
-  
-  loadSound(name, url) {
-    const audio = new Audio(url);
-    audio.volume = this.soundVolume;
-    this.sounds[name] = audio;
-    return audio;
-  }
-  
-  loadMusic(name, url) {
-    const audio = new Audio(url);
-    audio.volume = this.musicVolume;
-    audio.loop = true;
-    this.music[name] = audio;
-    return audio;
-  }
-  
-  playSound(name) {
-    if (!this.initialized) return;
-    
-    const sound = this.sounds[name];
-    if (sound) {
-      // Clone the sound to allow multiple instances
-      const soundClone = sound.cloneNode();
-      soundClone.volume = this.soundVolume;
-      soundClone.play();
-    }
-  }
-  
-  playMusic(name) {
-    // Stop any currently playing music first
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].pause();
-    }
-
-    const music = this.music[name];
-    if (music) {
-      music.currentTime = 0;
-      music.play().catch(e => {
-        console.log("Audio play prevented:", e);
-        // Implement audio play promise handling
-        document.addEventListener('click', () => {
-          music.play().catch(e => console.log("Still prevented:", e));
-        }, { once: true });
-      });
-      this.currentMusic = name;
-    }
-  }
-
-  
-  stopMusic() {
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].pause();
-      this.music[this.currentMusic].currentTime = 0;
-    }
-    this.currentMusic = null;
-  }
-  
-  pauseMusic() {
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].pause();
-    }
-  }
-  
-  resumeMusic() {
-    if (this.currentMusic && this.music[this.currentMusic]) {
-      this.music[this.currentMusic].play();
-    }
-  }
-  
-  setMusicVolume(volume) {
-    this.musicVolume = Math.max(0, Math.min(1, volume));
-    
-    // Update all music volumes
-    Object.values(this.music).forEach(audio => {
-      audio.volume = this.musicVolume;
-    });
-  }
-  
-  setSoundVolume(volume) {
-    this.soundVolume = Math.max(0, Math.min(1, volume));
-    
-    // Update all sound volumes
-    Object.values(this.sounds).forEach(audio => {
-      audio.volume = this.soundVolume;
-    });
-  }
-}
-
-// ./classes/TimeManager.js - A centralized timing system for the game
-
-class TimeManager {
-    constructor() {
-        this.deltaTime = 0;
-        this.lastTime = performance.now();
-        this.gameTime = 0; // Total elapsed game time in seconds
-        this.isPaused = false;
-        this.callbacks = {}; // For timed events
-        this.callbackId = 0;
-        
-        // Timer for level countdown
-        this.levelTime = 180; // 3 minutes in seconds
-        this.remainingTime = this.levelTime;
-    }
-
-    update(deltaTime) {
-        if (this.isPaused) return;
-        
-        this.deltaTime = deltaTime;
-        this.gameTime += this.deltaTime;
-        
-        // Update level timer
-        this.remainingTime = Math.max(0, this.levelTime - this.gameTime);
-        
-        // Process callbacks
-        this._processCallbacks();
-    }
-    
-    // Get formatted time as MM:SS
-    getFormattedTime() {
-        const minutes = Math.floor(this.remainingTime / 60);
-        const seconds = Math.floor(this.remainingTime % 60);
-        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    
-    pause() {
-        this.isPaused = true;
-    }
-    
-    resume() {
-        this.isPaused = false;
-        this.lastTime = performance.now(); // Reset lastTime to prevent big jumps
-    }
-    
-    reset() {
-        this.gameTime = 0;
-        this.remainingTime = this.levelTime;
-        this.lastTime = performance.now();
-        this.isPaused = false;
-    }
-    
-    // Add a callback to be executed after a delay
-    setTimeout(callback, delay) {
-        const id = this.callbackId++;
-        this.callbacks[id] = {
-            callback,
-            triggerTime: this.gameTime + delay,
-            repeat: false
-        };
-        return id;
-    }
-    
-    // Add a callback to be executed repeatedly
-    setInterval(callback, interval) {
-        const id = this.callbackId++;
-        this.callbacks[id] = {
-            callback,
-            triggerTime: this.gameTime + interval,
-            interval,
-            repeat: true
-        };
-        return id;
-    }
-    
-    // Remove a callback
-    clearTimeout(id) {
-        delete this.callbacks[id];
-    }
-    
-    _processCallbacks() {
-        Object.keys(this.callbacks).forEach(id => {
-            const callback = this.callbacks[id];
-            if (this.gameTime >= callback.triggerTime) {
-                callback.callback();
-                
-                if (callback.repeat) {
-                    callback.triggerTime = this.gameTime + callback.interval;
-                } else {
-                    delete this.callbacks[id];
-                }
-            }
-        });
-    }
-}
-
 // ./js/index.js
+// ./js/index.js - MODIFIED SECTION
+
 
 // Get canvas and context
 const canvas = document.getElementById('gameCanvas');
@@ -971,19 +324,20 @@ async function animate(backgroundCanvas, dynamicLayerImages) {
     // Disable image smoothing for crisp pixel art
     c.imageSmoothingEnabled = false;
 
-    // Always update these systems regardless of game state
+    // Always update timeManager - it will internally check if it should update based on game state
     timeManager.update(cappedDeltaTime);
     
-    // Check for timeup game over condition
-    if (gameStateManager.currentState === gameStateManager.states.PLAYING &&
-        timeManager.remainingTime <= 0) {
-        gameStateManager.changeState(gameStateManager.states.GAME_OVER);
-    }
-    
-    // Check for level complete condition (all coins collected)
-    if (gameStateManager.currentState === gameStateManager.states.PLAYING && 
-        checkAllCoinsCollected()) {
-        gameStateManager.changeState(gameStateManager.states.LEVEL_COMPLETE);
+    // Check for timeup game over condition - only in PLAYING state
+    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        // Game over on time out
+        if (timeManager.remainingTime <= 0) {
+            gameStateManager.changeState(gameStateManager.states.GAME_OVER);
+        }
+        
+        // Level complete check - only check when in PLAYING state
+        if (gameStateManager.areAllCoinsCollected()) {
+            gameStateManager.changeState(gameStateManager.states.LEVEL_COMPLETE);
+        }
     }
     
     // Only update gameplay elements when in PLAYING state
@@ -1017,12 +371,13 @@ async function animate(backgroundCanvas, dynamicLayerImages) {
         gameRenderer.draw(c, gameStateManager.currentState);
     }
     
-    // Always draw HUD (not affected by camera)
+    // Always draw HUD - the HUD class will internally check if it should display based on game state
     hud.draw(c);
 
     // Continue the game loop
     requestAnimationFrame(() => animate(backgroundCanvas, dynamicLayerImages));
 }
+
 
 function checkAllCoinsCollected() {
     // Get total coin count from the layersData
@@ -1071,7 +426,6 @@ const startGame = async () => {
     console.log(`Scaled map dimensions: ${scaledMapWidth}x${scaledMapHeight}px`);
 
     // Initialize camera with the scaled map dimensions
-    // This is crucial for proper boundary clamping
     cameraController.init(scaledMapWidth, scaledMapHeight, scale);
     
     console.log('Starting game loop...');
@@ -1079,16 +433,25 @@ const startGame = async () => {
     // Initialize time tracking for game loop
     lastTime = performance.now();
     
+    // Set initial game state - ensures timer won't start until state changes to PLAYING
+    gameStateManager.changeState(gameStateManager.states.INTRO);
+    
     // Start game loop with dynamic layer images
     animate(backgroundCanvas, dynamicLayerImages);
     
-    // Set initial game state
-    gameStateManager.changeState(gameStateManager.states.INTRO);
-
+    // Add input handling for starting game from intro
     document.addEventListener('keydown', (e) => {
+        // Handle state changes based on key press
         if (gameStateManager.currentState === gameStateManager.states.INTRO) {
             gameStateManager.changeState(gameStateManager.states.PLAYING);
-            soundManager.playMusic('intro');
+        } else if (gameStateManager.currentState === gameStateManager.states.PAUSED && e.key === 'Enter') {
+            gameStateManager.changeState(gameStateManager.states.PLAYING);
+        } else if (e.key === 'Escape' && gameStateManager.currentState === gameStateManager.states.PLAYING) {
+            gameStateManager.changeState(gameStateManager.states.PAUSED);
+        } else if ((gameStateManager.currentState === gameStateManager.states.LEVEL_COMPLETE || 
+                  gameStateManager.currentState === gameStateManager.states.GAME_OVER) &&
+                  gameStateManager.waitingForKeypress) {
+            gameStateManager.changeState(gameStateManager.states.INTRO);
         }
     });
     
@@ -1106,118 +469,468 @@ const startGame = async () => {
 // Start the game
 startGame();
 
-// ./js/eventListeners.js
-
-// ./js/eventListeners.js
-console.log("Initializing event listeners...");
-
-// Replace the keydown event listener
-window.removeEventListener('keydown', window.keydownListener);
-window.keydownListener = (event) => {
-    // Allow any key to start game from intro
-    if (gameStateManager && gameStateManager.currentState === gameStateManager.states.INTRO) {
-        gameStateManager.startGame();
-        return;
+// ./classes/GameStateManager.js
+class GameStateManager {
+    constructor() {
+        this.states = {
+            INTRO: 'intro',
+            PLAYING: 'playing',
+            PAUSED: 'paused',
+            LEVEL_COMPLETE: 'levelComplete',
+            GAME_OVER: 'gameOver'
+        };
+        
+        this.currentState = this.states.INTRO;
+        this.stateChangeCallbacks = {};
+        this.stateEnteredTime = 0;
+        this.lives = 3;
+        this.coins = 0;
+        this.cans = 0;
+        this.coinsCollected = new Set();
+        this.cansCollected = new Set();
+        this.waitingForKeypress = false;
+        this.totalCoinsInMap = 0; // To be calculated on init
     }
     
-    switch (event.key.toLowerCase()) {
-        case 'w':
-        case 'arrowup':
-            if (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING) {
-                return;
+    startGame() {
+        if (this.currentState === this.states.INTRO) {
+            this.changeState(this.states.PLAYING);
+        } else if (this.currentState === this.states.PAUSED) {
+            this.changeState(this.states.PLAYING);
+        } else if (this.waitingForKeypress) {
+            if (this.currentState === this.states.LEVEL_COMPLETE || 
+                this.currentState === this.states.GAME_OVER) {
+                this.changeState(this.states.INTRO);
+                this.waitingForKeypress = false;
             }
-            
-            console.log("Jump key pressed");
-            // Only process jump if not already jumping
-            if (!keys.w.pressed) {
-                // Handle jumping logic here
-                if (keys.a.pressed || keys.d.pressed) {
-                    // Directional jump
-                    player.jump();
-                } else {
-                    // Vertical hop
-                    player.verticalHop();
+        }
+    }
+    
+    init() {
+        this.reset();
+        
+        // Calculate total coins in the map
+        this.totalCoinsInMap = 0;
+        if (layersData && layersData.l_Coins) {
+            layersData.l_Coins.forEach(row => {
+                row.forEach(tile => {
+                    if (tile !== 0) this.totalCoinsInMap++;
+                });
+            });
+        }
+        console.log(`Total coins in map: ${this.totalCoinsInMap}`);
+    }
+    
+    // Replace the current reset() method with this improved version:
+    reset() {
+        // Don't directly call changeState here to avoid triggering callbacks before init is complete
+        this.currentState = this.states.INTRO;
+        this.stateEnteredTime = timeManager.gameTime;
+        this.lives = 3;
+        this.coins = 0;
+        this.cans = 0;
+        this.coinsCollected.clear();
+        this.cansCollected.clear();
+        this.waitingForKeypress = false;
+        
+        // Make sure timer is reset properly
+        if (timeManager) {
+            timeManager.reset();
+        }
+        
+        // Stop any playing music
+        if (soundManager) {
+            soundManager.stopMusic();
+        }
+        
+        // Reset player position to initial position - MODIFIED TO MATCH YOUR IMPLEMENTATION
+        if (player) {
+            player.x = 100;
+            player.y = 100;
+            player.velocity.x = 0;
+            player.velocity.y = 0;
+            player.movementState = 'idle'; // Changed from player.states.idle
+            player.animation.play('idle', true); // Reset animation
+            player.isInvincible = false;
+            player.invincibilityTimer = 0;
+        }
+        
+        // Reset camera position
+        if (cameraController) {
+            cameraController.x = 0;
+            cameraController.y = 0;
+            cameraController.targetX = 0;
+            cameraController.targetY = 0;
+        }
+    }
+    
+    changeState(newState) {
+        const oldState = this.currentState;
+        this.currentState = newState;
+        this.stateEnteredTime = timeManager.gameTime;
+        
+        // Trigger callbacks for the new state
+        if (this.stateChangeCallbacks[newState]) {
+            this.stateChangeCallbacks[newState].forEach(callback => callback(oldState));
+        }
+        
+        switch (newState) {
+            case this.states.INTRO:
+                soundManager.stopMusic();
+                timeManager.reset();
+                this.lives = 3;
+                this.coins = 0;
+                this.cans = 0;
+                this.coinsCollected.clear();
+                this.cansCollected.clear();
+                this.waitingForKeypress = false;
+                break;
+                
+            case this.states.PLAYING:
+                timeManager.resume();
+                if (oldState === this.states.INTRO || oldState === this.states.PAUSED) {
+                    soundManager.playMusic('intro');
                 }
-                keys.w.pressed = true;
-            }
-            break;
-            
-        case 'a':
-        case 'arrowleft':
-            if (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING) {
-                return;
-            }
-            
-            console.log("Moving LEFT");
-            keys.a.pressed = true;
-            break;
-            
-        case 'd':
-        case 'arrowright':
-            if (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING) {
-                return;
-            }
-            
-            console.log("Moving RIGHT");
-            keys.d.pressed = true;
-            break;
-            
-        case 'escape':
-            console.log("Pause toggled");
-            // Toggle between playing and paused states
-            if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
-                gameStateManager.changeState(gameStateManager.states.PAUSED);
-            } else if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
-                gameStateManager.changeState(gameStateManager.states.PLAYING);
-            }
-            break;
-            
-        case 'enter':
-            // Resume game if paused
-            if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
-                gameStateManager.changeState(gameStateManager.states.PLAYING);
-            }
-            break;
+                this.waitingForKeypress = false;
+                break;
+                
+            case this.states.PAUSED:
+                soundManager.pauseMusic();
+                timeManager.pause();
+                this.waitingForKeypress = false;
+                break;
+                
+            case this.states.LEVEL_COMPLETE:
+                timeManager.pause(); // Stop the timer
+                soundManager.playMusic('win');
+                // Wait for keypress to go back to intro
+                this.waitingForKeypress = true;
+                break;
+                
+            case this.states.GAME_OVER:
+                timeManager.pause(); // Stop the timer
+                soundManager.playMusic('gameOver');
+                // Wait for keypress to go back to intro
+                this.waitingForKeypress = true;
+                break;
+        }
     }
-};
-window.addEventListener('keydown', window.keydownListener);
-
-window.addEventListener('keyup', (event) => {
-    console.log(`Key UP: ${event.key}`);
     
-    switch (event.key.toLowerCase()) {
-        case 'a':
-        case 'arrowleft':
-            keys.a.pressed = false;
-            break;
-            
-        case 'd':
-        case 'arrowright':
-            keys.d.pressed = false;
-            break;
-            
-        case 'w':
-        case 'arrowup':
-            keys.w.pressed = false;
-            break;
+    onStateChange(state, callback) {
+        if (!this.stateChangeCallbacks[state]) {
+            this.stateChangeCallbacks[state] = [];
+        }
+        this.stateChangeCallbacks[state].push(callback);
     }
-});
-
-console.log("Event listeners initialized");
-
-// Handle tab visibility changes
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) {
-    lastTime = performance.now();
     
-    // Resume game if it was playing when tab was hidden
-    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
-      timeManager.resume();
+    isState(state) {
+        return this.currentState === state;
     }
-  } else {
-    // Pause game when tab is hidden
-    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
-      timeManager.pause();
+    
+    getStateTime() {
+        return timeManager.gameTime - this.stateEnteredTime;
     }
+    
+    // Player stats methods
+    addCoin() {
+        this.coins++;
+        soundManager.playSound('coin'); 
+    }
+    
+    addCan() {
+        this.cans++;
+        this.addLife();
+        soundManager.playSound('can');
+    }
+    
+    addLife() {
+        this.lives++;
+    }
+    
+    removeLife() {
+        this.lives--;
+        soundManager.playSound('hurt');
+        
+        if (this.lives <= 0) {
+            this.changeState(this.states.GAME_OVER);
+        }
+        
+        return this.lives;
+    }
+    
+    // Check if item was already collected
+    isItemCollected(type, x, y) {
+        const key = `${x},${y}`;
+        if (type === 'coin') {
+            return this.coinsCollected.has(key);
+        } else if (type === 'can') {
+            return this.cansCollected.has(key);
+        }
+        return false;
+    }
+    
+    // Mark item as collected
+    markItemCollected(type, x, y) {
+        const key = `${x},${y}`;
+        if (type === 'coin') {
+            this.coinsCollected.add(key);
+        } else if (type === 'can') {
+            this.cansCollected.add(key);
+        }
+    }
+    
+    // Check if all coins have been collected
+    areAllCoinsCollected() {
+        return this.coins >= this.totalCoinsInMap && this.totalCoinsInMap > 0;
+    }
+    
+    // Method to handle keypress events based on current state
+    handleKeyPress(key) {
+        if (this.isState(this.states.INTRO)) {
+            // Any key starts the game from intro
+            this.startGame();
+        } else if (this.isState(this.states.PAUSED) && key.toLowerCase() === 'enter') {
+            // Only Enter key resumes from pause
+            this.changeState(this.states.PLAYING);
+        } else if ((this.isState(this.states.LEVEL_COMPLETE) || this.isState(this.states.GAME_OVER)) && 
+                   this.waitingForKeypress) {
+            // Any key from level complete or game over goes to intro
+            this.changeState(this.states.INTRO);
+        }
+    }
+}
+
+// ./classes/TimeManager.js
+class TimeManager {
+    constructor() {
+        this.deltaTime = 0;
+        this.lastTime = performance.now();
+        this.gameTime = 0; // Total elapsed game time in seconds
+        this.isPaused = false;
+        this.callbacks = {}; // For timed events
+        this.callbackId = 0;
+        
+        // Timer for level countdown
+        this.levelTime = 180; // 3 minutes in seconds
+        this.remainingTime = this.levelTime;
+    }
+
+    // Replace the current update() method with this improved version:
+    update(deltaTime) {
+        // Only update time when game is in PLAYING state
+        if (this.isPaused || (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING)) {
+            return;
+        }
+        
+        this.deltaTime = deltaTime;
+        this.gameTime += this.deltaTime;
+        
+        // Update level timer
+        this.remainingTime = Math.max(0, this.levelTime - this.gameTime);
+        
+        // Process callbacks
+        this._processCallbacks();
+    }
+        
+    // Get formatted time as MM:SS
+    getFormattedTime() {
+        const minutes = Math.floor(this.remainingTime / 60);
+        const seconds = Math.floor(this.remainingTime % 60);
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    pause() {
+        this.isPaused = true;
+    }
+    
+    resume() {
+        this.isPaused = false;
+        this.lastTime = performance.now(); // Reset lastTime to prevent big jumps
+    }
+    
+    reset() {
+        this.gameTime = 0;
+        this.remainingTime = this.levelTime;
+        this.lastTime = performance.now();
+        this.isPaused = false;
+    }
+    
+    // Add a callback to be executed after a delay
+    setTimeout(callback, delay) {
+        const id = this.callbackId++;
+        this.callbacks[id] = {
+            callback,
+            triggerTime: this.gameTime + delay,
+            repeat: false
+        };
+        return id;
+    }
+    
+    // Add a callback to be executed repeatedly
+    setInterval(callback, interval) {
+        const id = this.callbackId++;
+        this.callbacks[id] = {
+            callback,
+            triggerTime: this.gameTime + interval,
+            interval,
+            repeat: true
+        };
+        return id;
+    }
+    
+    // Remove a callback
+    clearTimeout(id) {
+        delete this.callbacks[id];
+    }
+    
+    _processCallbacks() {
+        Object.keys(this.callbacks).forEach(id => {
+            const callback = this.callbacks[id];
+            if (this.gameTime >= callback.triggerTime) {
+                callback.callback();
+                
+                if (callback.repeat) {
+                    callback.triggerTime = this.gameTime + callback.interval;
+                } else {
+                    delete this.callbacks[id];
+                }
+            }
+        });
+    }
+}
+
+// ./classes/CameraController.js
+// Fix for the CameraController class to properly clamp and scale with the canvas
+
+class CameraController {
+  constructor(canvas, dpr) {
+    this.canvas = canvas;
+    this.dpr = dpr || 1;
+    this.x = 0;
+    this.y = 0;
+    this.targetX = 0;
+    this.targetY = 0;
+    this.smoothing = 0.1; // Lower = smoother camera
+    this.mapWidth = 0;
+    this.mapHeight = 0;
+    this.scale = 1;
+    this.viewWidth = canvas.width / dpr;
+    this.viewHeight = canvas.height / dpr;
   }
-});
+
+  init(mapWidth, mapHeight, scale) {
+    this.mapWidth = mapWidth;
+    this.mapHeight = mapHeight;
+    this.scale = scale;
+    // Viewable area dimensions (accounting for DPR)
+    this.viewWidth = this.canvas.width / this.dpr;
+    this.viewHeight = this.canvas.height / this.dpr;
+    
+    console.log(`Camera initialized with:`, {
+      mapWidth: this.mapWidth,
+      mapHeight: this.mapHeight,
+      scale: this.scale,
+      viewWidth: this.viewWidth,
+      viewHeight: this.viewHeight
+    });
+  }
+
+  update(target) {
+    if (!target) return;
+    
+    // Player is centered horizontally except near map edges
+    this.targetX = (target.x + target.width / 2) * this.scale - this.viewWidth / 2;
+    
+    // Player is positioned slightly below center vertically
+    const verticalOffset = this.viewHeight * 0.4; // Position player at 40% from top
+    this.targetY = (target.y + target.height / 2) * this.scale - verticalOffset;
+    
+    // Apply camera smoothing
+    this.x += (this.targetX - this.x) * this.smoothing;
+    this.y += (this.targetY - this.y) * this.smoothing;
+    
+    // Clamp to map boundaries - this is the key fix
+    this.x = Math.max(0, Math.min(this.x, this.mapWidth - this.viewWidth));
+    this.y = Math.max(0, Math.min(this.y, this.mapHeight - this.viewHeight));
+  }
+
+  applyTransform(ctx) {
+    ctx.save();
+    // Use Math.round to ensure pixel-perfect positioning
+    ctx.translate(-Math.round(this.x), -Math.round(this.y));
+  }
+
+  resetTransform(ctx) {
+    ctx.restore();
+  }
+
+  // Helper method to convert world coordinates to screen coordinates
+  worldToScreen(x, y) {
+    return {
+      x: x * this.scale - this.x,
+      y: y * this.scale - this.y
+    };
+  }
+
+  // Helper method to convert screen coordinates to world coordinates
+  screenToWorld(x, y) {
+    return {
+      x: (x + this.x) / this.scale,
+      y: (y + this.y) / this.scale
+    };
+  }
+}
+
+// ./index.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" href="data:,"> <!-- Empty favicon to prevent 404 -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <title>2D Platformer</title>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Utils -->
+    <script src="./js/utils.js"></script>
+
+    <!-- Core Systems -->
+    <script src="./classes/TimeManager.js"></script>
+    <script src="./classes/SoundManager.js"></script>
+    <script src="./classes/GameStateManager.js"></script>
+
+    <!-- Other Classes -->
+    <script src="./classes/AnimationController.js"></script>
+    <script src="./classes/CameraController.js"></script>
+    <script src="./classes/CollisionBlock.js"></script>
+    <script src="./classes/Player.js"></script>
+    <script src="./classes/Platform.js"></script>
+    <script src="./classes/GameRenderer.js"></script>
+    <script src="./classes/HUD.js"></script>
+
+    <!-- Layer Data -->
+    <script src="./data/l_BackgroundColor.js"></script>
+    <script src="./data/l_Pines1.js"></script>
+    <script src="./data/l_Pines2.js"></script>
+    <script src="./data/l_Pines3.js"></script>
+    <script src="./data/l_Pines4.js"></script>
+    <script src="./data/l_Platforms1.js"></script>
+    <script src="./data/l_Platfroms2.js"></script>
+    <script src="./data/l_Spikes.js"></script>
+    <script src="./data/l_Collisions.js"></script>
+    <script src="./data/l_Grass.js"></script>
+    <script src="./data/l_Coins.js"></script>
+    <script src="./data/l_Cans.js"></script>
+    <script src="./data/collisions.js"></script>
+    
+    <!-- Main Game Code -->
+    <script src="./js/eventListeners.js"></script>
+    <script src="./js/index.js"></script>
+
+</body>
+</html>
+
+
+
