@@ -1,4 +1,5 @@
-// ./classes/HUD.js - Heads-up display rendering
+// ./classes/HUD.js - Add a condition to only display HUD in the PLAYING state
+
 class HUD {
   constructor() {
     this.lifeIcon = null;
@@ -28,7 +29,8 @@ class HUD {
   }
   
   draw(context) {
-    if (!this.initialized) return;
+    // Only draw HUD if the game is in PLAYING state
+    if (!this.initialized || gameStateManager.currentState !== gameStateManager.states.PLAYING) return;
     
     // Save current context state
     context.save();
@@ -54,6 +56,7 @@ class HUD {
     context.restore();
   }
   
+  // Rest of HUD methods remain unchanged...
   drawLives(context) {
     const lives = gameStateManager.lives;
     const iconSize = 16;

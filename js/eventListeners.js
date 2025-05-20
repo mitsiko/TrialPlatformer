@@ -1,24 +1,29 @@
 // ./js/eventListeners.js
+// Fixed event listeners
 console.log("Initializing event listeners...");
 
-window.addEventListener('keydown', (event) => {
-    // Allow any key to start game from intro
-    if (gameStateManager && gameStateManager.currentState === gameStateManager.states.INTRO) {
-      gameStateManager.startGame();
-      return;
-    }
-    
-    if (gameStateManager && gameStateManager.currentState !== gameStateManager.states.PLAYING) {
-        console.log("Ignoring input - game not in PLAYING state");
-        return;
-    }
-
+// Keydown event listener
+window.removeEventListener('keydown', window.keydownListener);
+window.keydownListener = (event) => {
     switch (event.key.toLowerCase()) {
         case 'w':
         case 'arrowup':
-            console.log("Jump key pressed");
-            // Only process jump if not already jumping
-            if (!keys.w.pressed) {
+            // Any key can transition from intro to playing
+            if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+                gameStateManager.startGame();
+                return;
+            }
+            
+            // Wait for keypress in level complete and game over states
+            if (gameStateManager.waitingForKeypress && 
+                (gameStateManager.currentState === gameStateManager.states.LEVEL_COMPLETE ||
+                 gameStateManager.currentState === gameStateManager.states.GAME_OVER)) {
+                gameStateManager.changeState(gameStateManager.states.INTRO);
+                return;
+            }
+            
+            // Regular jump logic - only in PLAYING state
+            if (gameStateManager.currentState === gameStateManager.states.PLAYING && !keys.w.pressed) {
                 // Handle jumping logic here
                 if (keys.a.pressed || keys.d.pressed) {
                     // Directional jump
@@ -33,22 +38,54 @@ window.addEventListener('keydown', (event) => {
             
         case 'a':
         case 'arrowleft':
-            console.log("Moving LEFT");
-            keys.a.pressed = true;
+            // Any key can transition from intro to playing
+            if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+                gameStateManager.startGame();
+                return;
+            }
+            
+            // Wait for keypress in level complete and game over states
+            if (gameStateManager.waitingForKeypress && 
+                (gameStateManager.currentState === gameStateManager.states.LEVEL_COMPLETE ||
+                 gameStateManager.currentState === gameStateManager.states.GAME_OVER)) {
+                gameStateManager.changeState(gameStateManager.states.INTRO);
+                return;
+            }
+            
+            // Regular movement - only in PLAYING state
+            if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+                keys.a.pressed = true;
+            }
             break;
             
         case 'd':
         case 'arrowright':
-            console.log("Moving RIGHT");
-            keys.d.pressed = true;
+            // Any key can transition from intro to playing
+            if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+                gameStateManager.startGame();
+                return;
+            }
+            
+            // Wait for keypress in level complete and game over states
+            if (gameStateManager.waitingForKeypress && 
+                (gameStateManager.currentState === gameStateManager.states.LEVEL_COMPLETE ||
+                 gameStateManager.currentState === gameStateManager.states.GAME_OVER)) {
+                gameStateManager.changeState(gameStateManager.states.INTRO);
+                return;
+            }
+            
+            // Regular movement - only in PLAYING state
+            if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+                keys.d.pressed = true;
+            }
             break;
             
         case 'escape':
-            console.log("Pause toggled");
-            // Toggle between playing and paused states
+            // Only toggle pause when in PLAYING state
             if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
                 gameStateManager.changeState(gameStateManager.states.PAUSED);
             } else if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
+                // Escape can also resume from pause
                 gameStateManager.changeState(gameStateManager.states.PLAYING);
             }
             break;
@@ -58,12 +95,43 @@ window.addEventListener('keydown', (event) => {
             if (gameStateManager.currentState === gameStateManager.states.PAUSED) {
                 gameStateManager.changeState(gameStateManager.states.PLAYING);
             }
+            
+            // Any key can transition from intro to playing
+            if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+                gameStateManager.startGame();
+                return;
+            }
+            
+            // Wait for keypress in level complete and game over states
+            if (gameStateManager.waitingForKeypress && 
+                (gameStateManager.currentState === gameStateManager.states.LEVEL_COMPLETE ||
+                 gameStateManager.currentState === gameStateManager.states.GAME_OVER)) {
+                gameStateManager.changeState(gameStateManager.states.INTRO);
+            }
+            break;
+            
+        default:
+            // For any other key, handle general state transitions
+            // Any key can transition from intro to playing
+            if (gameStateManager.currentState === gameStateManager.states.INTRO) {
+                gameStateManager.startGame();
+                return;
+            }
+            
+            // Wait for keypress in level complete and game over states
+            if (gameStateManager.waitingForKeypress && 
+                (gameStateManager.currentState === gameStateManager.states.LEVEL_COMPLETE ||
+                 gameStateManager.currentState === gameStateManager.states.GAME_OVER)) {
+                gameStateManager.changeState(gameStateManager.states.INTRO);
+            }
             break;
     }
-});
+};
+window.addEventListener('keydown', window.keydownListener);
 
 window.addEventListener('keyup', (event) => {
-    console.log(`Key UP: ${event.key}`);
+    // Only handle key up events if we're in PLAYING state
+    if (gameStateManager.currentState !== gameStateManager.states.PLAYING) return;
     
     switch (event.key.toLowerCase()) {
         case 'a':

@@ -1,9 +1,11 @@
 // ./js/index.js - MODIFIED SECTION
 
+
 // Get canvas and context
 const canvas = document.getElementById('gameCanvas');
 const c = canvas.getContext('2d');
 const dpr = window.devicePixelRatio || 1;
+const totalCoins = 58;
 
 // Set canvas size - MODIFIED
 // Set canvas size with proper scaling for pixel art
@@ -324,6 +326,19 @@ async function animate(backgroundCanvas, dynamicLayerImages) {
     // Always update these systems regardless of game state
     timeManager.update(cappedDeltaTime);
     
+    // Check for timeup game over condition - only in PLAYING state
+    if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
+        // Game over on time out
+        if (timeManager.remainingTime <= 0) {
+            gameStateManager.changeState(gameStateManager.states.GAME_OVER);
+        }
+        
+        // Level complete check - only check when in PLAYING state
+        if (gameStateManager.areAllCoinsCollected()) {
+            gameStateManager.changeState(gameStateManager.states.LEVEL_COMPLETE);
+        }
+    }
+    
     // Only update gameplay elements when in PLAYING state
     if (gameStateManager.currentState === gameStateManager.states.PLAYING) {
         // Update camera before player to ensure proper following
@@ -335,30 +350,47 @@ async function animate(backgroundCanvas, dynamicLayerImages) {
         // Check item collisions only when playing
         player.checkItemCollisions(layersData.l_Coins, 'coin');
         player.checkItemCollisions(layersData.l_Cans, 'can');
+        
+        // Apply camera transform to context
+        cameraController.applyTransform(c);
+        
+        // Draw static background map
+        c.drawImage(backgroundCanvas, 0, 0);
+        
+        // Draw dynamic layers (coins and cans)
+        renderDynamicLayers(c, dynamicLayerImages, cameraController.scale);
+        
+        // Draw player
+        player.draw(c);
+        
+        // Reset transform before drawing UI
+        cameraController.resetTransform(c);
+    } else {
+        // For non-playing states, we draw the appropriate screen
+        gameRenderer.draw(c, gameStateManager.currentState);
     }
-
-    // Apply camera transform to context
-    cameraController.applyTransform(c);
     
-    // Draw static background map
-    c.drawImage(backgroundCanvas, 0, 0);
-    
-    // Draw dynamic layers (coins and cans)
-    renderDynamicLayers(c, dynamicLayerImages, cameraController.scale);
-    
-    // Draw player
-    player.draw(c);
-    
-    // Reset transform before drawing UI
-    cameraController.resetTransform(c);
-    
-    // Always draw HUD (not affected by camera)
+    // Always draw HUD (but HUD class now checks if we're in PLAYING state)
     hud.draw(c);
 
     // Continue the game loop
     requestAnimationFrame(() => animate(backgroundCanvas, dynamicLayerImages));
 }
 
+
+function checkAllCoinsCollected() {
+    // Get total coin count from the layersData
+    let totalCoins = 0;
+    
+    layersData.l_Coins.forEach(row => {
+        row.forEach(tile => {
+            if (tile !== 0) totalCoins++;
+        });
+    });
+    
+    // Compare with collected coins
+    return gameStateManager.coins >= totalCoins && totalCoins > 0;
+}
 
 // MODIFIED START FUNCTION
 // Modify the startGame function to pass dynamic layer images to animate
